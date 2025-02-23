@@ -4,9 +4,12 @@
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Faculty Dashboard</h2>
-        <a href="{% url 'faculty_logout' %}" class="btn btn-outline-danger">
-            <i class="fas fa-sign-out-alt me-1"></i> Logout
-        </a>
+        <form method="post" action="{% url 'logout' %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger">
+                <i class="fas fa-sign-out-alt me-1"></i> Logout
+            </button>
+        </form>
     </div>
 
     <!-- Quick Stats -->

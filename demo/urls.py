@@ -38,7 +38,7 @@ urlpatterns = [
     # Faculty URLs
     path('faculty/login/', faculty_login, name='faculty_login'),
     path('faculty/dashboard/', faculty_dashboard, name='faculty_dashboard'),
-    path('faculty/logout/', faculty_logout, name='faculty_logout'),
+    path('faculty/logout/', views.faculty_logout_view, name='faculty_logout'),
     path('faculty/equipment/', equipment_list_manage, name='equipment_list_manage'),
     path('faculty/equipment/add/', equipment_create, name='equipment_create'),
     path('faculty/equipment/<int:pk>/edit/', equipment_edit, name='equipment_edit'),

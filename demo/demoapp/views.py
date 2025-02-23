@@ -7,6 +7,8 @@ from django.urls import reverse_lazy
 from djreservation.views import ProductReservationView
 from .models import MultimediaEquipment, EquipmentUsage, MaintenanceRecord, UserProfile, EquipmentCategory
 from .forms import SignUpForm, EquipmentCategoryForm, MultimediaEquipmentForm, MaintenanceRecordForm
+from django.views.decorators.http import require_http_methods
+from django.core.exceptions import ObjectDoesNotExist
 
 class EquipmentReservation(ProductReservationView):
     base_model = MultimediaEquipment
@@ -46,26 +48,42 @@ def login_view(request):
     
     return render(request, 'login.html')
 
+@login_required
+@require_http_methods(["POST"])
+def logout_view(request):
+    # Check if user is faculty or student
+    is_faculty = request.user.userprofile.is_faculty()
+    logout(request)
+    messages.success(request, 'You have been successfully logged out.')
+    # Redirect based on user type
+    if is_faculty:
+        return redirect('faculty_login')
+    return redirect('login')
+
+@login_required
+@require_http_methods(["POST"])
+def faculty_logout_view(request):
+    logout(request)
+    messages.success(request, 'You have been successfully logged out.')
+    return redirect('faculty_login')
+
 def faculty_login(request):
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
+        user = authenticate(request, username=username, password=password)
         
-        # Check for faculty credentials
-        if username == 'faculty' and password == 'faculty123':
-            # Create a session for faculty
-            request.session['is_faculty'] = True
-            messages.success(request, 'Welcome to Faculty Dashboard!')
+        if user is not None and hasattr(user, 'userprofile') and user.userprofile.is_faculty():
+            login(request, user)
             return redirect('faculty_dashboard')
         else:
             messages.error(request, 'Invalid faculty credentials.')
-            return redirect('faculty_login')
     
     return render(request, 'faculty/faculty_login.html')
 
 def faculty_dashboard(request):
     # Check if user is faculty
-    if not request.session.get('is_faculty', False):
+    if not request.user.userprofile.is_faculty():
         messages.error(request, 'Please login as faculty first.')
         return redirect('faculty_login')
         
@@ -75,12 +93,6 @@ def faculty_dashboard(request):
         'maintenance_needed': MultimediaEquipment.objects.filter(condition='needs_repair').count(),
     }
     return render(request, 'faculty/dashboard.html', context)
-
-def faculty_logout(request):
-    if 'is_faculty' in request.session:
-        del request.session['is_faculty']
-    messages.success(request, 'Successfully logged out from faculty dashboard.')
-    return redirect('login')
 
 @login_required
 def home(request):
@@ -94,7 +106,7 @@ def equipment_list(request):
     
     context = {
         'equipment_list': equipment,
-        'is_faculty': request.session.get('is_faculty', False),
+        'is_faculty': request.user.userprofile.is_faculty(),
     }
     return render(request, 'equipment/equipment_list.html', context)
 
@@ -115,7 +127,7 @@ def equipment_return(request, usage_id):
     return render(request, 'equipment_return.html', {'usage': usage})
 
 def dashboard(request):
-    if not request.session.get('is_faculty', False):
+    if not request.user.userprofile.is_faculty():
         messages.error(request, 'Access denied. Faculty only.')
         return redirect('login')
     
@@ -131,7 +143,7 @@ def dashboard(request):
     return render(request, 'faculty/dashboard.html', context)
 
 def equipment_list_manage(request):
-    if not request.session.get('is_faculty', False):
+    if not request.user.userprofile.is_faculty():
         messages.error(request, 'Access denied. Faculty only.')
         return redirect('login')
         
@@ -139,7 +151,7 @@ def equipment_list_manage(request):
     return render(request, 'faculty/equipment_list.html', {'equipment': equipment})
 
 def equipment_create(request):
-    if not request.session.get('is_faculty', False):
+    if not request.user.userprofile.is_faculty():
         messages.error(request, 'Access denied. Faculty only.')
         return redirect('login')
         
@@ -155,7 +167,7 @@ def equipment_create(request):
     return render(request, 'faculty/equipment_form.html', {'form': form, 'action': 'Add'})
 
 def equipment_edit(request, pk):
-    if not request.session.get('is_faculty', False):
+    if not request.user.userprofile.is_faculty():
         messages.error(request, 'Access denied. Faculty only.')
         return redirect('login')
         
@@ -171,7 +183,7 @@ def equipment_edit(request, pk):
     return render(request, 'faculty/equipment_form.html', {'form': form, 'action': 'Edit'})
 
 def equipment_delete(request, pk):
-    if not request.session.get('is_faculty', False):
+    if not request.user.userprofile.is_faculty():
         messages.error(request, 'Access denied. Faculty only.')
         return redirect('login')
         
@@ -183,7 +195,7 @@ def equipment_delete(request, pk):
     return render(request, 'faculty/equipment_confirm_delete.html', {'equipment': equipment})
 
 def category_list(request):
-    if not request.session.get('is_faculty', False):
+    if not request.user.userprofile.is_faculty():
         messages.error(request, 'Access denied. Faculty only.')
         return redirect('login')
         
@@ -191,7 +203,7 @@ def category_list(request):
     return render(request, 'faculty/category_list.html', {'categories': categories})
 
 def category_create(request):
-    if not request.session.get('is_faculty', False):
+    if not request.user.userprofile.is_faculty():
         messages.error(request, 'Access denied. Faculty only.')
         return redirect('login')
         
@@ -207,7 +219,7 @@ def category_create(request):
     return render(request, 'faculty/category_form.html', {'form': form, 'action': 'Add'})
 
 def category_edit(request, pk):
-    if not request.session.get('is_faculty', False):
+    if not request.user.userprofile.is_faculty():
         messages.error(request, 'Access denied. Faculty only.')
         return redirect('login')
         
@@ -223,7 +235,7 @@ def category_edit(request, pk):
     return render(request, 'faculty/category_form.html', {'form': form, 'action': 'Edit'})
 
 def category_delete(request, pk):
-    if not request.session.get('is_faculty', False):
+    if not request.user.userprofile.is_faculty():
         messages.error(request, 'Access denied. Faculty only.')
         return redirect('login')
         
@@ -304,10 +316,3 @@ def equipment_edit(request, pk):
 
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
-
-@login_required
-@require_http_methods(["POST"])
-def logout_view(request):
-    logout(request)
-    messages.success(request, 'You have been successfully logged out.')
-    return redirect('login')
