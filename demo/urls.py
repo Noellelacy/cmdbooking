@@ -14,14 +14,14 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, re_path
+from django.urls import path, re_path, include
 from djreservation import urls as djreservation_urls
 from demoapp.views import (
     home, EquipmentReservation, signup, login_view, logout_view,
     equipment_list, my_reservations, equipment_return, dashboard,
     faculty_dashboard, equipment_list_manage, equipment_create,
     equipment_edit, equipment_delete, category_list, category_create,
-    category_edit, category_delete, faculty_login, faculty_logout
+    category_edit, category_delete, faculty_login, faculty_logout_view
 )
 from django.contrib.auth.views import LogoutView
 
@@ -38,7 +38,7 @@ urlpatterns = [
     # Faculty URLs
     path('faculty/login/', faculty_login, name='faculty_login'),
     path('faculty/dashboard/', faculty_dashboard, name='faculty_dashboard'),
-    path('faculty/logout/', views.faculty_logout_view, name='faculty_logout'),
+    path('faculty/logout/', faculty_logout_view, name='faculty_logout'),
     path('faculty/equipment/', equipment_list_manage, name='equipment_list_manage'),
     path('faculty/equipment/add/', equipment_create, name='equipment_create'),
     path('faculty/equipment/<int:pk>/edit/', equipment_edit, name='equipment_edit'),
@@ -52,5 +52,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     
     # djreservation URLs
-    re_path(r'^reservation/', EquipmentReservation.as_view(), name='equipment_reservation'),
-] + djreservation_urls.urlpatterns
+    re_path(r'^reservation/', include(djreservation_urls)),
+]

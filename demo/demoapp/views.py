@@ -9,6 +9,8 @@ from .models import MultimediaEquipment, EquipmentUsage, MaintenanceRecord, User
 from .forms import SignUpForm, EquipmentCategoryForm, MultimediaEquipmentForm, MaintenanceRecordForm
 from django.views.decorators.http import require_http_methods
 from django.core.exceptions import ObjectDoesNotExist
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.template.context_processors import csrf
 
 class EquipmentReservation(ProductReservationView):
     base_model = MultimediaEquipment
@@ -40,9 +42,9 @@ def login_view(request):
         password = request.POST.get('password')
         user = authenticate(request, username=username, password=password)
         
-        if user is not None:
+        if user is not None and hasattr(user, 'userprofile') and not user.userprofile.is_faculty():
             login(request, user)
-            return redirect('home')  # This will redirect to index.html without extra message
+            return redirect('home')
         else:
             messages.error(request, 'Invalid username or password.')
     
@@ -57,16 +59,17 @@ def logout_view(request):
     messages.success(request, 'You have been successfully logged out.')
     # Redirect based on user type
     if is_faculty:
-        return redirect('faculty_login')
-    return redirect('login')
+        return redirect('http://127.0.0.1:8000/faculty/login/')
+    return redirect('http://127.0.0.1:8000/login/')
 
 @login_required
 @require_http_methods(["POST"])
 def faculty_logout_view(request):
     logout(request)
     messages.success(request, 'You have been successfully logged out.')
-    return redirect('faculty_login')
+    return redirect('http://127.0.0.1:8000/faculty/login/')
 
+@ensure_csrf_cookie
 def faculty_login(request):
     if request.method == 'POST':
         username = request.POST.get('username')
@@ -79,7 +82,9 @@ def faculty_login(request):
         else:
             messages.error(request, 'Invalid faculty credentials.')
     
-    return render(request, 'faculty/faculty_login.html')
+    context = {}
+    context.update(csrf(request))
+    return render(request, 'faculty/faculty_login.html', context)
 
 def faculty_dashboard(request):
     # Check if user is faculty
