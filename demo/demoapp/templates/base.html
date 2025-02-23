@@ -1,48 +1,122 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <!-- Required meta tags -->
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reservation System</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+      :root {
+        --primary-color: #007bff;
+        --text-color: #333;
+        --bg-color: #ffffff;
+        --input-border: #ddd;
+      }
+      
+      body {
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      }
+      
+      .navbar {
+        background-color: #f8f9fa;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      }
+      
+      .navbar-brand {
+        font-weight: 600;
+        color: var(--primary-color) !important;
+        font-size: 1.4rem;
+        font-weight: 500;
+      }
+      
+      .container {
+        margin-top: 2rem;
+      }
+      
+      .alert {
+        border-radius: 10px;
+        border: none;
+        margin-bottom: 1rem;
+      }
 
-
-<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
-<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
-{% block css%} {%endblock%}
-    <title>Hello, world!</title>
+      .form-control.is-invalid {
+        border-color: #dc3545;
+        background-image: none;
+      }
+      
+      .navbar-nav .nav-link {
+        color: rgba(255,255,255,.8) !important;
+      }
+      .navbar-nav .nav-link:hover {
+        color: white !important;
+      }
+      .welcome-text {
+        color: rgba(255,255,255,.9) !important;
+        margin-right: 1rem;
+        padding: .5rem 0;
+        display: inline-block;
+      }
+      .btn-logout {
+        color: rgba(255,255,255,.8) !important;
+        border: 1px solid rgba(255,255,255,.5);
+        padding: .375rem 1rem;
+        transition: all 0.3s ease;
+        text-decoration: none;
+      }
+      .btn-logout:hover {
+        color: white !important;
+        border-color: white;
+        background: rgba(255,255,255,.1);
+        text-decoration: none;
+      }
+    </style>
+    {% block css %}{% endblock %}
   </head>
   <body>
-    <h1 class="text-center"><a href="/">Hello, world!</a></h1>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+      <div class="container">
+        <a class="navbar-brand" href="/">
+          <i class="fas fa-boxes me-2"></i>
+          LOGO
+        </a>
+        
+        {% if user.is_authenticated %}
+        <div class="ms-auto d-flex align-items-center">
+          <span class="welcome-text">
+            <i class="fas fa-user me-1"></i>
+            Welcome, {{ user.username }}!
+          </span>
+          <form method="post" action="{% url 'logout' %}" class="m-0 d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-link nav-link">Logout</button>
+          </form>
+        </div>
+        {% endif %}
+      </div>
+    </nav>
 
-{% if messages %}
-<div class="alert alert-info">
-  <ul class="messages">
-    {% for message in messages %}
-      <li class="{{ message.tags }}">{{ message }}</li>
-    {% endfor %}
-  </ul>
-</div>
-{% endif %}
+    <div class="container">
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-danger">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    </div>
 
-<div class="container">
+    <div class="container">
+    {% block content %}
+    {% endblock %}
+    </div>
 
-
-
-{% block content %}
-{% endblock %}
-
-
-
-</div>
-
-    <!-- Optional JavaScript -->
-    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
-    <script src="https://code.jquery.com/jquery-3.2.1.min.js" ></script>
-
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
-
-{% block js %}
-{%endblock%}
-
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {% block js %}{% endblock %}
   </body>
 </html>

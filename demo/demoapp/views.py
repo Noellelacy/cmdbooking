@@ -1,17 +1,313 @@
-from django.shortcuts import render
-
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib import messages
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.views import LoginView
+from django.urls import reverse_lazy
 from djreservation.views import ProductReservationView
-from .models import MyObject
+from .models import MultimediaEquipment, EquipmentUsage, MaintenanceRecord, UserProfile, EquipmentCategory
+from .forms import SignUpForm, EquipmentCategoryForm, MultimediaEquipmentForm, MaintenanceRecordForm
 
+class EquipmentReservation(ProductReservationView):
+    base_model = MultimediaEquipment
+    amount_field = 'quantity_available'
+    extra_display_field = ['equipment_type', 'location', 'description']
 
-class MyObjectReservation(ProductReservationView):
-    base_model = MyObject     # required
-    amount_field = 'quantity'  # required
-    extra_display_field = ['measurement_unit']  # not required
+class CustomLoginView(LoginView):
+    template_name = 'registration/login.html'
+    success_url = reverse_lazy('index')
+    
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        user = self.request.user
+        
+        # Check if user is faculty
+        try:
+            if hasattr(user, 'userprofile') and user.userprofile.is_faculty():
+                messages.success(self.request, f'Welcome back, Professor {user.get_full_name() or user.username}!')
+                return redirect('faculty_dashboard')
+        except:
+            pass
+            
+        messages.success(self.request, f'Welcome back, {user.username}!')
+        return response
 
+def login_view(request):
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        user = authenticate(request, username=username, password=password)
+        
+        if user is not None:
+            login(request, user)
+            return redirect('home')  # This will redirect to index.html without extra message
+        else:
+            messages.error(request, 'Invalid username or password.')
+    
+    return render(request, 'login.html')
 
+def faculty_login(request):
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        
+        # Check for faculty credentials
+        if username == 'faculty' and password == 'faculty123':
+            # Create a session for faculty
+            request.session['is_faculty'] = True
+            messages.success(request, 'Welcome to Faculty Dashboard!')
+            return redirect('faculty_dashboard')
+        else:
+            messages.error(request, 'Invalid faculty credentials.')
+            return redirect('faculty_login')
+    
+    return render(request, 'faculty/faculty_login.html')
+
+def faculty_dashboard(request):
+    # Check if user is faculty
+    if not request.session.get('is_faculty', False):
+        messages.error(request, 'Please login as faculty first.')
+        return redirect('faculty_login')
+        
+    context = {
+        'total_equipment': MultimediaEquipment.objects.count(),
+        'available_equipment': MultimediaEquipment.objects.filter(is_available=True).count(),
+        'maintenance_needed': MultimediaEquipment.objects.filter(condition='needs_repair').count(),
+    }
+    return render(request, 'faculty/dashboard.html', context)
+
+def faculty_logout(request):
+    if 'is_faculty' in request.session:
+        del request.session['is_faculty']
+    messages.success(request, 'Successfully logged out from faculty dashboard.')
+    return redirect('login')
+
+@login_required
 def home(request):
-    list_object = MyObject.objects.all()
-    return render(request, 'index.html', context={
-        'list_object': list_object
+    return render(request, 'index.html')
+
+@login_required
+def equipment_list(request):
+    equipment = MultimediaEquipment.objects.all().select_related(
+        'category', 'added_by', 'last_modified_by'
+    ).order_by('-created_at')
+    
+    context = {
+        'equipment_list': equipment,
+        'is_faculty': request.session.get('is_faculty', False),
+    }
+    return render(request, 'equipment/equipment_list.html', context)
+
+@login_required
+def my_reservations(request):
+    reservations = EquipmentUsage.objects.filter(user=request.user).order_by('-checkout_time')
+    return render(request, 'my_reservations.html', {
+        'reservations': reservations
     })
+
+@login_required
+def equipment_return(request, usage_id):
+    usage = get_object_or_404(EquipmentUsage, id=usage_id, user=request.user)
+    if request.method == 'POST':
+        usage.return_equipment()
+        messages.success(request, 'Equipment returned successfully!')
+        return redirect('my_reservations')
+    return render(request, 'equipment_return.html', {'usage': usage})
+
+def dashboard(request):
+    if not request.session.get('is_faculty', False):
+        messages.error(request, 'Access denied. Faculty only.')
+        return redirect('login')
+    
+    total_equipment = MultimediaEquipment.objects.count()
+    available_equipment = MultimediaEquipment.objects.filter(is_available=True).count()
+    maintenance_needed = MultimediaEquipment.objects.filter(condition='needs_repair').count()
+    
+    context = {
+        'total_equipment': total_equipment,
+        'available_equipment': available_equipment,
+        'maintenance_needed': maintenance_needed,
+    }
+    return render(request, 'faculty/dashboard.html', context)
+
+def equipment_list_manage(request):
+    if not request.session.get('is_faculty', False):
+        messages.error(request, 'Access denied. Faculty only.')
+        return redirect('login')
+        
+    equipment = MultimediaEquipment.objects.all().order_by('name')
+    return render(request, 'faculty/equipment_list.html', {'equipment': equipment})
+
+def equipment_create(request):
+    if not request.session.get('is_faculty', False):
+        messages.error(request, 'Access denied. Faculty only.')
+        return redirect('login')
+        
+    if request.method == 'POST':
+        form = MultimediaEquipmentForm(request.POST)
+        if form.is_valid():
+            equipment = form.save(commit=False)
+            equipment.save()
+            messages.success(request, 'Equipment added successfully!')
+            return redirect('equipment_list_manage')
+    else:
+        form = MultimediaEquipmentForm()
+    return render(request, 'faculty/equipment_form.html', {'form': form, 'action': 'Add'})
+
+def equipment_edit(request, pk):
+    if not request.session.get('is_faculty', False):
+        messages.error(request, 'Access denied. Faculty only.')
+        return redirect('login')
+        
+    equipment = get_object_or_404(MultimediaEquipment, pk=pk)
+    if request.method == 'POST':
+        form = MultimediaEquipmentForm(request.POST, instance=equipment)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Equipment updated successfully!')
+            return redirect('equipment_list_manage')
+    else:
+        form = MultimediaEquipmentForm(instance=equipment)
+    return render(request, 'faculty/equipment_form.html', {'form': form, 'action': 'Edit'})
+
+def equipment_delete(request, pk):
+    if not request.session.get('is_faculty', False):
+        messages.error(request, 'Access denied. Faculty only.')
+        return redirect('login')
+        
+    equipment = get_object_or_404(MultimediaEquipment, pk=pk)
+    if request.method == 'POST':
+        equipment.delete()
+        messages.success(request, 'Equipment deleted successfully!')
+        return redirect('equipment_list_manage')
+    return render(request, 'faculty/equipment_confirm_delete.html', {'equipment': equipment})
+
+def category_list(request):
+    if not request.session.get('is_faculty', False):
+        messages.error(request, 'Access denied. Faculty only.')
+        return redirect('login')
+        
+    categories = EquipmentCategory.objects.all().order_by('name')
+    return render(request, 'faculty/category_list.html', {'categories': categories})
+
+def category_create(request):
+    if not request.session.get('is_faculty', False):
+        messages.error(request, 'Access denied. Faculty only.')
+        return redirect('login')
+        
+    if request.method == 'POST':
+        form = EquipmentCategoryForm(request.POST)
+        if form.is_valid():
+            category = form.save(commit=False)
+            category.save()
+            messages.success(request, 'Category added successfully!')
+            return redirect('category_list')
+    else:
+        form = EquipmentCategoryForm()
+    return render(request, 'faculty/category_form.html', {'form': form, 'action': 'Add'})
+
+def category_edit(request, pk):
+    if not request.session.get('is_faculty', False):
+        messages.error(request, 'Access denied. Faculty only.')
+        return redirect('login')
+        
+    category = get_object_or_404(EquipmentCategory, pk=pk)
+    if request.method == 'POST':
+        form = EquipmentCategoryForm(request.POST, instance=category)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Category updated successfully!')
+            return redirect('category_list')
+    else:
+        form = EquipmentCategoryForm(instance=category)
+    return render(request, 'faculty/category_form.html', {'form': form, 'action': 'Edit'})
+
+def category_delete(request, pk):
+    if not request.session.get('is_faculty', False):
+        messages.error(request, 'Access denied. Faculty only.')
+        return redirect('login')
+        
+    category = get_object_or_404(EquipmentCategory, pk=pk)
+    if request.method == 'POST':
+        category.delete()
+        messages.success(request, 'Category deleted successfully!')
+        return redirect('category_list')
+    return render(request, 'faculty/category_confirm_delete.html', {'category': category})
+
+def signup(request):
+    if request.method == 'POST':
+        form = SignUpForm(request.POST)
+        if form.is_valid():
+            try:
+                # Save the user with the form data
+                user = form.save()
+                messages.success(request, 'Registration successful! Please login.')
+                return redirect('login')
+            except Exception as e:
+                messages.error(request, 'An error occurred during registration. Please try again.')
+                print(f"Registration error: {str(e)}")  # For debugging
+        else:
+            # Display form errors
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f'{error}')
+    else:
+        form = SignUpForm()
+    
+    return render(request, 'signup.html', {'form': form})
+
+@login_required
+@user_passes_test(lambda u: hasattr(u, 'userprofile') and u.userprofile.is_faculty())
+def equipment_create(request):
+    """View for faculty to create new equipment"""
+    if request.method == 'POST':
+        form = MultimediaEquipmentForm(request.POST)
+        if form.is_valid():
+            equipment = form.save(commit=False)
+            equipment.added_by = request.user
+            equipment.last_modified_by = request.user
+            equipment.save()
+            messages.success(request, 'Equipment added successfully.')
+            return redirect('equipment_list')
+    else:
+        form = MultimediaEquipmentForm()
+    
+    return render(request, 'equipment/equipment_form.html', {'form': form, 'action': 'Add'})
+
+@login_required
+@user_passes_test(lambda u: hasattr(u, 'userprofile') and u.userprofile.is_faculty())
+def equipment_edit(request, pk):
+    """View for faculty to edit equipment"""
+    equipment = get_object_or_404(MultimediaEquipment, pk=pk)
+    
+    if request.method == 'POST':
+        form = MultimediaEquipmentForm(request.POST, instance=equipment)
+        if form.is_valid():
+            equipment = form.save(commit=False)
+            equipment.last_modified_by = request.user
+            equipment.save()
+            messages.success(request, 'Equipment updated successfully.')
+            return redirect('equipment_list')
+    else:
+        form = MultimediaEquipmentForm(instance=equipment)
+    
+    context = {
+        'form': form,
+        'equipment': equipment,
+        'action': 'Edit',
+        'added_by': equipment.added_by,
+        'last_modified_by': equipment.last_modified_by,
+        'created_at': equipment.created_at,
+        'updated_at': equipment.updated_at,
+    }
+    return render(request, 'equipment/equipment_form.html', context)
+
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_http_methods
+
+@login_required
+@require_http_methods(["POST"])
+def logout_view(request):
+    logout(request)
+    messages.success(request, 'You have been successfully logged out.')
+    return redirect('login')

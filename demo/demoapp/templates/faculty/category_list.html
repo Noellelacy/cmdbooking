@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block css %}
+<style>
+    .category-card {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+    .category-card:hover {
+        transform: translateY(-5px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Equipment Categories</h2>
+        <div>
+            <a href="{% url 'category_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i> Add Category
+            </a>
+            <a href="{% url 'faculty_dashboard' %}" class="btn btn-outline-primary ms-2">
+                <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    {% if messages %}
+    <div class="mb-4">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="row g-4">
+        {% for category in categories %}
+        <div class="col-md-6 col-lg-4">
+            <div class="category-card p-3">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h5 class="mb-0">{{ category.name }}</h5>
+                    <div class="dropdown">
+                        <button class="btn btn-link text-dark p-0" type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item" href="{% url 'category_edit' category.pk %}">
+                                    <i class="fas fa-edit me-2"></i> Edit
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item text-danger" href="{% url 'category_delete' category.pk %}">
+                                    <i class="fas fa-trash me-2"></i> Delete
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                {% if category.description %}
+                <p class="text-muted small mb-2">{{ category.description|truncatechars:150 }}</p>
+                {% endif %}
+                <div class="small text-muted">
+                    <div><i class="fas fa-calendar-alt me-1"></i> Created: {{ category.created_at|date:"M d, Y" }}</div>
+                    <div><i class="fas fa-user me-1"></i> By: {{ category.created_by.get_full_name|default:category.created_by.username }}</div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="text-center py-5">
+                <i class="fas fa-folder-open fa-3x mb-3 text-muted"></i>
+                <h5>No Categories Found</h5>
+                <p class="text-muted">Start by adding some categories to organize your equipment.</p>
+                <a href="{% url 'category_create' %}" class="btn btn-primary">
+                    <i class="fas fa-plus me-1"></i> Add Category
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

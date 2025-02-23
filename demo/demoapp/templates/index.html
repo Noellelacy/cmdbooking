@@ -1,29 +1,105 @@
-{% extends "base.html" %} 
+{% extends 'base.html' %}
 
 {% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col text-center">
+            <h1 class="display-4">Welcome to AUN Equipment Reservation</h1>
+            <p class="lead">Reserve multimedia and communication equipment for your needs.</p>
+        </div>
+    </div>
 
-{% if  request.user.is_authenticated %}
-  {% if request.reservation %}
-  
-  <a href="{% url 'reservation_list' %}"> Show  Reservation </a>
-  <ul class="list-group">
-    {% for obj in list_object %}
-    <li class="list-group-item"> 
-      <a href="{% url 'myreservation' obj.pk %}" >{{obj}}</a>
-    </li>
-    {% endfor %}    
-  </ul>
-  <a href="{% url 'finish_reservation' %}">  Finish Reservation </a>
-  {% else %}
-  <a href="{% url 'add_user_reservation' %}"> Add new reservation </a>
-  {% endif %}
+    {% if user.is_authenticated %}
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
 
-{% else %}
-<div class="alert">
-  Please Login before create a reservation 
-
-  <a class="btn btn-success"  href="/admin/login/?next=/"> Login </a>
+        <!-- Main Action Boxes -->
+        <div class="row justify-content-center">
+            <div class="col-md-5">
+                <div class="action-box book-now">
+                    <div class="action-icon">
+                        <i class="fas fa-calendar-plus"></i>
+                    </div>
+                    <h2>Book Now</h2>
+                    <p>Browse and reserve equipment for your upcoming needs</p>
+                    <a href="{% url 'equipment_list' %}" class="btn btn-primary btn-lg">View Equipment</a>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="action-box check-booking">
+                    <div class="action-icon">
+                        <i class="fas fa-clipboard-check"></i>
+                    </div>
+                    <h2>Check Booking</h2>
+                    <p>View and manage your current reservations</p>
+                    <a href="{% url 'my_reservations' %}" class="btn btn-primary btn-lg">View Reservations</a>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="row justify-content-center">
+            <div class="col-md-6 text-center">
+                <div class="alert alert-info">
+                    <h4>Please Login</h4>
+                    <p>You need to <a href="{% url 'login' %}">login</a> or <a href="{% url 'signup' %}">sign up</a> to make reservations.</p>
+                </div>
+            </div>
+        </div>
+    {% endif %}
 </div>
-{% endif %}
+{% endblock %}
 
+{% block css %}
+<style>
+.action-box {
+    background: #ffffff;
+    border-radius: 15px;
+    padding: 2.5rem;
+    text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    height: 100%;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+}
+
+.action-box:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+.action-box .action-icon {
+    font-size: 3.5rem;
+    margin-bottom: 1.5rem;
+    color: #007bff;
+}
+
+.action-box h2 {
+    color: #333;
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+.action-box p {
+    color: #666;
+    margin-bottom: 1.5rem;
+    font-size: 1.1rem;
+}
+
+.action-box .btn {
+    padding: 0.8rem 2rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.alert {
+    border-radius: 10px;
+}
+</style>
 {% endblock %}

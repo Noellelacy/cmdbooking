@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">My Reservations</h1>
+            <p class="lead">View and manage your equipment reservations</p>
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    {% if user_reservations %}
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Equipment</th>
+                                        <th>Reserved On</th>
+                                        <th>Status</th>
+                                        <th>Return Date</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for reservation in user_reservations %}
+                                        <tr>
+                                            <td>{{ reservation.equipment.name }}</td>
+                                            <td>{{ reservation.checkout_time|date:"M d, Y H:i" }}</td>
+                                            <td>
+                                                {% if reservation.return_time %}
+                                                    <span class="badge bg-secondary">Returned</span>
+                                                {% else %}
+                                                    <span class="badge bg-success">Active</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if reservation.return_time %}
+                                                    {{ reservation.return_time|date:"M d, Y H:i" }}
+                                                {% else %}
+                                                    -
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if not reservation.return_time %}
+                                                    <a href="{% url 'equipment_return' reservation.id %}" class="btn btn-sm btn-warning">
+                                                        <i class="fas fa-undo-alt"></i> Return
+                                                    </a>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                            <h4>No Reservations Found</h4>
+                            <p class="text-muted">You haven't made any reservations yet.</p>
+                            <a href="{% url 'equipment_list' %}" class="btn btn-primary mt-3">
+                                <i class="fas fa-calendar-plus"></i> Make a Reservation
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block css %}
+<style>
+.card {
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.table th {
+    border-top: none;
+    color: #666;
+}
+
+.btn-sm {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.875rem;
+}
+
+.btn i {
+    margin-right: 0.3rem;
+}
+
+.badge {
+    padding: 0.5em 0.8em;
+    font-weight: 500;
+}
+</style>
+{% endblock %}

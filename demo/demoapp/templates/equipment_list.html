@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">Available Equipment</h1>
+            <p class="lead">Browse and reserve equipment for your needs</p>
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    {% if equipment_list %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Equipment</th>
+                                        <th>Type</th>
+                                        <th>Location</th>
+                                        <th>Available</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for equipment in equipment_list %}
+                                        <tr>
+                                            <td>{{ equipment.name }}</td>
+                                            <td>{{ equipment.equipment_type }}</td>
+                                            <td>{{ equipment.location }}</td>
+                                            <td>{{ equipment.quantity_available }}</td>
+                                            <td>
+                                                {% if equipment.quantity_available > 0 %}
+                                                    <a href="{% url 'myreservation' equipment.pk %}" class="btn btn-sm btn-primary">
+                                                        <i class="fas fa-calendar-plus"></i> Reserve
+                                                    </a>
+                                                {% else %}
+                                                    <button class="btn btn-sm btn-secondary" disabled>
+                                                        <i class="fas fa-ban"></i> Not Available
+                                                    </button>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+                            <h4>No Equipment Available</h4>
+                            <p class="text-muted">Check back later for available equipment.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block css %}
+<style>
+.card {
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.table th {
+    border-top: none;
+    color: #666;
+}
+
+.btn-sm {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.875rem;
+}
+
+.btn i {
+    margin-right: 0.3rem;
+}
+</style>
+{% endblock %}
