@@ -36,7 +36,17 @@ class CustomLoginView(LoginView):
         messages.success(self.request, f'Welcome back, {user.username}!')
         return response
 
+@ensure_csrf_cookie
 def login_view(request):
+    # If user is already logged in
+    if request.user.is_authenticated:
+        try:
+            if request.user.userprofile.is_faculty():
+                return redirect('faculty_dashboard')
+            return redirect('home')
+        except:
+            pass
+
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
@@ -44,11 +54,12 @@ def login_view(request):
         
         if user is not None and hasattr(user, 'userprofile') and not user.userprofile.is_faculty():
             login(request, user)
+            messages.success(request, f'Welcome back, {user.get_full_name() or user.username}!')
             return redirect('home')
         else:
             messages.error(request, 'Invalid username or password.')
     
-    return render(request, 'login.html')
+    return render(request, 'login.html', {'next': request.GET.get('next', '')})
 
 @login_required
 @require_http_methods(["POST"])

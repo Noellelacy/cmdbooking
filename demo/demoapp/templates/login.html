@@ -17,8 +17,9 @@
                     {% endfor %}
                     {% endif %}
                     
-                    <form method="post">
+                    <form method="post" action="{% url 'login' %}{% if next %}?next={{ next }}{% endif %}">
                         {% csrf_token %}
+                        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
                         <div class="mb-3">
                             <label for="username" class="form-label">Username</label>
                             <input type="text" class="form-control" id="username" name="username" required>
