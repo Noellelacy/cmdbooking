@@ -17,8 +17,9 @@
                     {% endfor %}
                     {% endif %}
                     
-                    <form method="post" action="{% url 'faculty_login' %}">
+                    <form method="post" action="{% url 'faculty_login' %}{% if next %}?next={{ next }}{% endif %}">
                         {% csrf_token %}
+                        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
                         <div class="mb-3">
                             <label for="username" class="form-label">Username</label>
                             <input type="text" class="form-control" id="username" name="username" required>
@@ -35,7 +36,7 @@
                     </form>
                     
                     <div class="mt-4 text-center">
-                        <span><a href="http://127.0.0.1:8000/login/">Student Login</a></span>
+                        <span>Not a faculty member? <a href="{% url 'login' %}">Student Login</a></span>
                     </div>
                 </div>
             </div>

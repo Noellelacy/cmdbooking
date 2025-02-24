@@ -57,7 +57,14 @@ class CustomUserAdmin(UserAdmin):
     get_reservation_count.short_description = 'Reservations'
 
     def save_model(self, request, obj, form, change):
+        creating = not obj.pk  # Check if this is a new user
         super().save_model(request, obj, form, change)
+        if creating:
+            # Create profile for new users
+            UserProfile.objects.get_or_create(
+                user=obj,
+                defaults={'user_type': 'student', 'number': ''}
+            )
 
 class MaintenanceRecordInline(admin.TabularInline):
     model = MaintenanceRecord

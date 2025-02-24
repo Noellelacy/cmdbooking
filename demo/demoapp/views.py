@@ -77,6 +77,14 @@ def faculty_logout_view(request):
 
 @ensure_csrf_cookie
 def faculty_login(request):
+    # If user is already logged in and is faculty, redirect to dashboard
+    if request.user.is_authenticated:
+        try:
+            if request.user.userprofile.is_faculty():
+                return redirect('faculty_dashboard')
+        except:
+            pass
+
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
@@ -84,13 +92,12 @@ def faculty_login(request):
         
         if user is not None and hasattr(user, 'userprofile') and user.userprofile.is_faculty():
             login(request, user)
+            messages.success(request, f'Welcome back, Professor {user.get_full_name() or user.username}!')
             return redirect('faculty_dashboard')
         else:
             messages.error(request, 'Invalid faculty credentials.')
     
-    context = {}
-    context.update(csrf(request))
-    return render(request, 'faculty/faculty_login.html', context)
+    return render(request, 'faculty/faculty_login.html', {'next': request.GET.get('next', '')})
 
 def faculty_dashboard(request):
     # Check if user is faculty

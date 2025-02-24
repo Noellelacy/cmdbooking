@@ -25,11 +25,17 @@ class SignUpForm(UserCreationForm):
         user.last_name = self.cleaned_data['last_name']
         if commit:
             user.save()
-            UserProfile.objects.create(
-                user=user,
-                user_type='student',
-                number=self.cleaned_data['number']
-            )
+            try:
+                UserProfile.objects.get_or_create(
+                    user=user,
+                    defaults={
+                        'user_type': self.cleaned_data.get('user_type', 'student'),
+                        'number': self.cleaned_data['number']
+                    }
+                )
+            except Exception as e:
+                user.delete()  # Rollback user creation if profile creation fails
+                raise forms.ValidationError(f"Error creating account: {str(e)}")
         return user
 
 class EquipmentCategoryForm(forms.ModelForm):
