@@ -53,21 +53,27 @@ def login_view(request):
 @login_required
 @require_http_methods(["POST"])
 def logout_view(request):
-    # Check if user is faculty or student
-    is_faculty = request.user.userprofile.is_faculty()
+    # Check if user is faculty or student and store the result before logout
+    try:
+        is_faculty = hasattr(request.user, 'userprofile') and request.user.userprofile.is_faculty()
+    except:
+        is_faculty = False
+    
+    # Now logout the user
     logout(request)
     messages.success(request, 'You have been successfully logged out.')
-    # Redirect based on user type
+    
+    # Redirect based on stored user type
     if is_faculty:
-        return redirect('http://127.0.0.1:8000/faculty/login/')
-    return redirect('http://127.0.0.1:8000/login/')
+        return redirect('faculty_login')
+    return redirect('login')
 
 @login_required
 @require_http_methods(["POST"])
 def faculty_logout_view(request):
     logout(request)
     messages.success(request, 'You have been successfully logged out.')
-    return redirect('http://127.0.0.1:8000/faculty/login/')
+    return redirect('faculty_login')
 
 @ensure_csrf_cookie
 def faculty_login(request):
@@ -254,20 +260,29 @@ def category_delete(request, pk):
 def signup(request):
     if request.method == 'POST':
         form = SignUpForm(request.POST)
-        if form.is_valid():
-            try:
-                # Save the user with the form data
-                user = form.save()
-                messages.success(request, 'Registration successful! Please login.')
+        try:
+            if form.is_valid():
+                user = form.save(commit=False)
+                user.save()
+                # Create UserProfile
+                number = form.cleaned_data.get('number')  
+                UserProfile.objects.create(
+                    user=user,
+                    user_type='student',
+                    number=number
+                )
+                messages.success(request, 'Account created successfully! Please log in.')
                 return redirect('login')
-            except Exception as e:
-                messages.error(request, 'An error occurred during registration. Please try again.')
-                print(f"Registration error: {str(e)}")  # For debugging
-        else:
-            # Display form errors
-            for field, errors in form.errors.items():
-                for error in errors:
-                    messages.error(request, f'{error}')
+            else:
+                # Show specific form errors
+                for field, errors in form.errors.items():
+                    for error in errors:
+                        messages.error(request, f"{field.replace('_', ' ').title()}: {error}")
+        except Exception as e:
+            messages.error(request, f"Error creating account: {str(e)}")
+            # If user was created but profile failed, delete the user
+            if 'user' in locals():
+                user.delete()
     else:
         form = SignUpForm()
     
