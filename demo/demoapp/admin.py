@@ -35,12 +35,18 @@ class CustomUserAdmin(UserAdmin):
     )
 
     def get_user_type(self, obj):
-        return obj.userprofile.get_user_type_display() if hasattr(obj, 'userprofile') else 'No Profile'
+        try:
+            return obj.userprofile.get_user_type_display()
+        except UserProfile.DoesNotExist:
+            return 'N/A'
     get_user_type.short_description = 'Role'
     get_user_type.admin_order_field = 'userprofile__user_type'
 
     def get_number(self, obj):
-        return obj.userprofile.number if hasattr(obj, 'userprofile') else 'N/A'
+        try:
+            return obj.userprofile.number
+        except UserProfile.DoesNotExist:
+            return 'N/A'
     get_number.short_description = 'ID Number'
     get_number.admin_order_field = 'userprofile__number'
 
@@ -49,6 +55,9 @@ class CustomUserAdmin(UserAdmin):
         url = reverse('admin:demoapp_equipmentusage_changelist') + f'?user__id__exact={obj.id}'
         return format_html('<a href="{}">{} reservations</a>', url, count)
     get_reservation_count.short_description = 'Reservations'
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
 
 class MaintenanceRecordInline(admin.TabularInline):
     model = MaintenanceRecord
@@ -119,6 +128,12 @@ class MultimediaEquipmentAdmin(admin.ModelAdmin):
         return format_html('<span style="color: green;">OK</span>')
     get_maintenance_status.short_description = 'Maintenance'
 
+    def save_model(self, request, obj, form, change):
+        if not change:  # If creating new equipment
+            obj.added_by = request.user
+        obj.last_modified_by = request.user
+        super().save_model(request, obj, form, change)
+
 @admin.register(EquipmentUsage)
 class EquipmentUsageAdmin(admin.ModelAdmin):
     list_display = ('equipment', 'user', 'get_user_type', 'checkout_time', 'return_time', 'get_status', 'course_code')
@@ -142,7 +157,10 @@ class EquipmentUsageAdmin(admin.ModelAdmin):
     )
 
     def get_user_type(self, obj):
-        return obj.user.userprofile.get_user_type_display()
+        try:
+            return obj.user.userprofile.get_user_type_display()
+        except UserProfile.DoesNotExist:
+            return 'Unknown'
     get_user_type.short_description = 'User Type'
     get_user_type.admin_order_field = 'user__userprofile__user_type'
 

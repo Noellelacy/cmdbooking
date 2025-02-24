@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserCreationForm
 from .models import (
     MultimediaEquipment, EquipmentCategory, UserProfile,
-    MaintenanceRecord, MultimediaEquipmentExtended
+    MaintenanceRecord
 )
 
 class SignUpForm(UserCreationForm):    
@@ -43,8 +43,10 @@ class EquipmentCategoryForm(forms.ModelForm):
 class MultimediaEquipmentForm(forms.ModelForm):
     class Meta:
         model = MultimediaEquipment
-        fields = ['name', 'equipment_type', 'category', 'serial_number', 'condition', 'notes']
+        fields = ['name', 'equipment_type', 'category', 'serial_number', 'inventory_number', 
+                 'location', 'description', 'condition', 'requires_training', 'notes']
         widgets = {
+            'description': forms.Textarea(attrs={'rows': 3}),
             'notes': forms.Textarea(attrs={'rows': 3}),
         }
 
