@@ -6,7 +6,7 @@ from django.contrib.auth.views import LoginView
 from django.urls import reverse_lazy
 from djreservation.views import ProductReservationView
 from .models import MultimediaEquipment, EquipmentUsage, MaintenanceRecord, UserProfile, EquipmentCategory
-from .forms import SignUpForm, EquipmentCategoryForm, MultimediaEquipmentForm, MaintenanceRecordForm, ReservationApprovalForm
+from .forms import SignUpForm, EquipmentCategoryForm, MultimediaEquipmentForm, MaintenanceRecordForm, ReservationApprovalForm, CategoryForm
 from django.views.decorators.http import require_http_methods
 from django.core.exceptions import ObjectDoesNotExist
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -291,58 +291,73 @@ def equipment_delete(request, pk):
         return redirect('equipment_list_manage')
     return render(request, 'faculty/equipment_confirm_delete.html', {'equipment': equipment})
 
+@login_required
 def category_list(request):
+    """Display list of equipment categories."""
     if not request.user.userprofile.is_faculty():
-        messages.error(request, 'Access denied. Faculty only.')
-        return redirect('login')
-        
+        messages.error(request, 'Only faculty members can access this page.')
+        return redirect('faculty_login')
+    
     categories = EquipmentCategory.objects.all().order_by('name')
     return render(request, 'faculty/category_list.html', {'categories': categories})
 
+@login_required
 def category_create(request):
+    """Create a new equipment category."""
     if not request.user.userprofile.is_faculty():
-        messages.error(request, 'Access denied. Faculty only.')
-        return redirect('login')
-        
+        messages.error(request, 'Only faculty members can access this page.')
+        return redirect('faculty_login')
+    
     if request.method == 'POST':
-        form = EquipmentCategoryForm(request.POST)
+        form = CategoryForm(request.POST)
         if form.is_valid():
             category = form.save(commit=False)
+            category.created_by = request.user
             category.save()
-            messages.success(request, 'Category added successfully!')
+            messages.success(request, 'Category created successfully.')
             return redirect('category_list')
     else:
-        form = EquipmentCategoryForm()
-    return render(request, 'faculty/category_form.html', {'form': form, 'action': 'Add'})
+        form = CategoryForm()
+    
+    return render(request, 'faculty/category_form.html', {'form': form, 'action': 'Create'})
 
+@login_required
 def category_edit(request, pk):
+    """Edit an existing equipment category."""
     if not request.user.userprofile.is_faculty():
-        messages.error(request, 'Access denied. Faculty only.')
-        return redirect('login')
-        
+        messages.error(request, 'Only faculty members can access this page.')
+        return redirect('faculty_login')
+    
     category = get_object_or_404(EquipmentCategory, pk=pk)
+    
     if request.method == 'POST':
-        form = EquipmentCategoryForm(request.POST, instance=category)
+        form = CategoryForm(request.POST, instance=category)
         if form.is_valid():
             form.save()
-            messages.success(request, 'Category updated successfully!')
+            messages.success(request, 'Category updated successfully.')
             return redirect('category_list')
     else:
-        form = EquipmentCategoryForm(instance=category)
+        form = CategoryForm(instance=category)
+    
     return render(request, 'faculty/category_form.html', {'form': form, 'action': 'Edit'})
 
+@login_required
 def category_delete(request, pk):
+    """Delete an equipment category."""
     if not request.user.userprofile.is_faculty():
-        messages.error(request, 'Access denied. Faculty only.')
-        return redirect('login')
-        
+        messages.error(request, 'Only faculty members can access this page.')
+        return redirect('faculty_login')
+    
     category = get_object_or_404(EquipmentCategory, pk=pk)
+    
     if request.method == 'POST':
         category.delete()
-        messages.success(request, 'Category deleted successfully!')
+        messages.success(request, 'Category deleted successfully.')
         return redirect('category_list')
+    
     return render(request, 'faculty/category_confirm_delete.html', {'category': category})
 
+@login_required
 def signup(request):
     if request.method == 'POST':
         form = SignUpForm(request.POST)

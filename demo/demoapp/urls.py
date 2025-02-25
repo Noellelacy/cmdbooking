@@ -21,4 +21,10 @@ urlpatterns = [
     
     # Reservation URLs
     path('my-reservations/', views.my_reservations, name='my_reservations'),
+
+    # Category Management URLs
+    path('categories/', views.category_list, name='category_list'),
+    path('categories/add/', views.category_create, name='category_create'),
+    path('categories/<int:pk>/edit/', views.category_edit, name='category_edit'),
+    path('categories/<int:pk>/delete/', views.category_delete, name='category_delete'),
 ]

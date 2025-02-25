@@ -77,6 +77,15 @@ class SignUpForm(UserCreationForm):
                 raise forms.ValidationError(f"Error creating account: {str(e)}")
         return user
 
+class CategoryForm(forms.ModelForm):
+    """Form for creating and editing equipment categories."""
+    class Meta:
+        model = EquipmentCategory
+        fields = ['name', 'description']
+        widgets = {
+            'description': forms.Textarea(attrs={'rows': 3}),
+        }
+
 class EquipmentCategoryForm(forms.ModelForm):
     class Meta:
         model = EquipmentCategory
