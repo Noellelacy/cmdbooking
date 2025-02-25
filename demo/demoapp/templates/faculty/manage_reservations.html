@@ -1,0 +1,181 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Manage Reservations</h2>
+    
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label for="status" class="form-label">Status</label>
+                    <select name="status" id="status" class="form-select">
+                        <option value="">All</option>
+                        {% for status_value, status_label in status_choices %}
+                        <option value="{{ status_value }}" {% if status_value == current_status %}selected{% endif %}>
+                            {{ status_label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="start_date" class="form-label">Start Date</label>
+                    <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="end_date" class="form-label">End Date</label>
+                    <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="search" class="form-label">Search</label>
+                    <input type="text" class="form-control" id="search" name="search" value="{{ search_query }}" placeholder="Search...">
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">Apply Filters</button>
+                    <a href="{% url 'manage_reservations' %}" class="btn btn-secondary">Clear Filters</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Reservations Table -->
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Equipment</th>
+                    <th>Student</th>
+                    <th>Course</th>
+                    <th>Checkout Time</th>
+                    <th>Expected Return</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for reservation in reservations %}
+                <tr>
+                    <td>{{ reservation.equipment.name }}</td>
+                    <td>{{ reservation.user.get_full_name }}</td>
+                    <td>{{ reservation.course_code }}</td>
+                    <td>{{ reservation.checkout_time|date:"Y-m-d H:i" }}</td>
+                    <td>{{ reservation.expected_return_time|date:"Y-m-d H:i" }}</td>
+                    <td>
+                        <span class="badge {% if reservation.status == 'pending' %}bg-warning
+                                         {% elif reservation.status == 'approved' %}bg-success
+                                         {% elif reservation.status == 'rejected' %}bg-danger
+                                         {% elif reservation.status == 'checked_out' %}bg-info
+                                         {% elif reservation.status == 'returned' %}bg-secondary
+                                         {% elif reservation.status == 'overdue' %}bg-danger
+                                         {% endif %}">
+                            {{ reservation.get_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if reservation.status == 'pending' %}
+                        <a href="{% url 'approve_reservation' reservation.id %}" class="btn btn-sm btn-success">Approve</a>
+                        <a href="{% url 'reject_reservation' reservation.id %}" class="btn btn-sm btn-danger">Reject</a>
+                        {% endif %}
+                        
+                        {% if reservation.status == 'approved' %}
+                        <button class="btn btn-sm btn-info" onclick="markCheckedOut({{ reservation.id }})">Mark Checked Out</button>
+                        {% endif %}
+                        
+                        {% if reservation.status == 'checked_out' or reservation.status == 'overdue' %}
+                        <button class="btn btn-sm btn-secondary" onclick="markReturned({{ reservation.id }})">Mark Returned</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center">No reservations found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if reservations.paginator.num_pages > 1 %}
+    <nav aria-label="Page navigation" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if reservations.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ reservations.previous_page_number }}&status={{ current_status }}&start_date={{ start_date|date:'Y-m-d' }}&end_date={{ end_date|date:'Y-m-d' }}&search={{ search_query }}">&laquo;</a>
+            </li>
+            {% endif %}
+
+            {% for i in reservations.paginator.page_range %}
+            <li class="page-item {% if reservations.number == i %}active{% endif %}">
+                <a class="page-link" href="?page={{ i }}&status={{ current_status }}&start_date={{ start_date|date:'Y-m-d' }}&end_date={{ end_date|date:'Y-m-d' }}&search={{ search_query }}">{{ i }}</a>
+            </li>
+            {% endfor %}
+
+            {% if reservations.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ reservations.next_page_number }}&status={{ current_status }}&start_date={{ start_date|date:'Y-m-d' }}&end_date={{ end_date|date:'Y-m-d' }}&search={{ search_query }}">&raquo;</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+
+<!-- JavaScript for AJAX calls -->
+<script>
+function markCheckedOut(reservationId) {
+    if (confirm('Mark this reservation as checked out?')) {
+        fetch(`/faculty/reservations/${reservationId}/checkout/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        });
+    }
+}
+
+function markReturned(reservationId) {
+    if (confirm('Mark this reservation as returned?')) {
+        fetch(`/faculty/reservations/${reservationId}/return/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        });
+    }
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock %}

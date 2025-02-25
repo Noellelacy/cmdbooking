@@ -1,64 +1,192 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Faculty Dashboard</h2>
-        <form method="post" action="{% url 'logout' %}" class="d-inline">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-outline-danger">
-                <i class="fas fa-sign-out-alt me-1"></i> Logout
-            </button>
-        </form>
-    </div>
+<div class="container mt-4">
+    <h2>Faculty Dashboard</h2>
 
-    <!-- Quick Stats -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card bg-primary text-white">
-                <div class="card-body">
+    <!-- Quick Stats Row -->
+    <div class="row mt-4">
+        <div class="col-md-3 mb-4">
+            <div class="card bg-primary text-white h-100">
+                <div class="card-body text-center">
                     <h5 class="card-title">Total Equipment</h5>
-                    <h2>{{ total_equipment }}</h2>
+                    <p class="display-4">{{ total_equipment }}</p>
+                    <p class="mb-0">{{ available_equipment }} Available</p>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card bg-success text-white">
-                <div class="card-body">
-                    <h5 class="card-title">Available Equipment</h5>
-                    <h2>{{ available_equipment }}</h2>
+        <div class="col-md-3 mb-4">
+            <div class="card bg-success text-white h-100">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Active Reservations</h5>
+                    <p class="display-4">{{ active_reservations }}</p>
+                    <p class="mb-0">{{ pending_reservations }} Pending Approval</p>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card bg-warning text-white">
-                <div class="card-body">
-                    <h5 class="card-title">Needs Maintenance</h5>
-                    <h2>{{ maintenance_needed }}</h2>
+        <div class="col-md-3 mb-4">
+            <div class="card bg-warning text-white h-100">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Maintenance Needed</h5>
+                    <p class="display-4">{{ maintenance_needed }}</p>
+                    <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#maintenanceModal">
+                        Report Issue
+                    </button>
                 </div>
             </div>
         </div>
-    </div>
-
-    <!-- Quick Actions -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card">
+        <div class="col-md-3 mb-4">
+            <div class="card bg-info text-white h-100">
                 <div class="card-body">
                     <h5 class="card-title">Quick Actions</h5>
-                    <div class="d-flex gap-2">
-                        <a href="{% url 'equipment_list_manage' %}" class="btn btn-primary">
-                            <i class="fas fa-list me-1"></i> Manage Equipment
+                    <div class="list-group">
+                        <a href="{% url 'manage_reservations' %}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-calendar-check"></i> Manage Reservations
                         </a>
-                        <a href="{% url 'equipment_create' %}" class="btn btn-success">
-                            <i class="fas fa-plus me-1"></i> Add Equipment
-                        </a>
-                        <a href="{% url 'category_list' %}" class="btn btn-info text-white">
-                            <i class="fas fa-tags me-1"></i> Manage Categories
+                        <a href="{% url 'equipment_list_manage' %}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-tools"></i> Manage Equipment
                         </a>
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Main Content Row -->
+    <div class="row">
+        <!-- Recent Reservations -->
+        <div class="col-md-8 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Recent Reservations</h5>
+                    <a href="{% url 'manage_reservations' %}" class="btn btn-sm btn-primary">View All</a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Equipment</th>
+                                    <th>Student</th>
+                                    <th>Checkout Time</th>
+                                    <th>Expected Return</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for reservation in recent_reservations %}
+                                <tr>
+                                    <td>{{ reservation.equipment.name }}</td>
+                                    <td>{{ reservation.user.get_full_name }}</td>
+                                    <td>{{ reservation.checkout_time|date:"M d, Y H:i" }}</td>
+                                    <td>{{ reservation.expected_return_time|date:"M d, Y H:i" }}</td>
+                                    <td>
+                                        {% if reservation.status == 'pending' %}
+                                            <span class="badge bg-warning">Pending</span>
+                                        {% elif reservation.status == 'approved' %}
+                                            <span class="badge bg-success">Approved</span>
+                                        {% elif reservation.status == 'checked_out' %}
+                                            <span class="badge bg-info">Checked Out</span>
+                                        {% elif reservation.status == 'overdue' %}
+                                            <span class="badge bg-danger">Overdue</span>
+                                        {% elif reservation.status == 'returned' %}
+                                            <span class="badge bg-secondary">Returned</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if reservation.status == 'pending' %}
+                                            <a href="{% url 'approve_reservation' reservation.id %}" class="btn btn-sm btn-success">
+                                                <i class="fas fa-check"></i>
+                                            </a>
+                                            <a href="{% url 'reject_reservation' reservation.id %}" class="btn btn-sm btn-danger">
+                                                <i class="fas fa-times"></i>
+                                            </a>
+                                        {% elif reservation.status == 'approved' %}
+                                            <a href="{% url 'mark_checked_out' reservation.id %}" class="btn btn-sm btn-info">
+                                                Check Out
+                                            </a>
+                                        {% elif reservation.status == 'checked_out' %}
+                                            <a href="{% url 'mark_returned' reservation.id %}" class="btn btn-sm btn-warning">
+                                                Return
+                                            </a>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center">No recent reservations</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Equipment Management -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Equipment Management</h5>
+                    <a href="{% url 'equipment_create' %}" class="btn btn-sm btn-success">
+                        <i class="fas fa-plus"></i> Add New
+                    </a>
+                </div>
+                <div class="card-body">
+                    <h6>Maintenance Alerts</h6>
+                    <div class="list-group">
+                        {% for equipment in maintenance_alerts %}
+                        <div class="list-group-item">
+                            <h6 class="mb-1">{{ equipment.name }}</h6>
+                            <small class="text-muted">Condition: {{ equipment.get_condition_display }}</small>
+                            <div class="mt-2">
+                                <a href="{% url 'equipment_detail' equipment.id %}" class="btn btn-sm btn-primary">View Details</a>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="list-group-item">
+                            <p class="mb-1">No maintenance alerts</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Maintenance Report Modal -->
+<div class="modal fade" id="maintenanceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Report Maintenance Issue</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'report_maintenance' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="equipment" class="form-label">Equipment</label>
+                        <select name="equipment" id="equipment" class="form-select" required>
+                            <option value="">Select Equipment</option>
+                            {% for equipment in all_equipment %}
+                            <option value="{{ equipment.id }}">{{ equipment.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="issue_description" class="form-label">Issue Description</label>
+                        <textarea name="issue_description" id="issue_description" class="form-control" rows="3" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Submit Report</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

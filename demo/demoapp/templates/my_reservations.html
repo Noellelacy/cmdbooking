@@ -40,21 +40,25 @@
                                             <td>{{ reservation.equipment.name }}</td>
                                             <td>{{ reservation.checkout_time|date:"M d, Y H:i" }}</td>
                                             <td>
-                                                {% if reservation.return_time %}
-                                                    <span class="badge bg-secondary">Returned</span>
+                                                {% if reservation.actual_return_time %}
+                                                    <span class="badge bg-success">Returned</span>
                                                 {% else %}
-                                                    <span class="badge bg-success">Active</span>
+                                                    {% if reservation.is_overdue %}
+                                                        <span class="badge bg-danger">Overdue</span>
+                                                    {% else %}
+                                                        <span class="badge bg-warning">Active</span>
+                                                    {% endif %}
                                                 {% endif %}
                                             </td>
                                             <td>
-                                                {% if reservation.return_time %}
-                                                    {{ reservation.return_time|date:"M d, Y H:i" }}
+                                                {% if reservation.actual_return_time %}
+                                                    {{ reservation.actual_return_time|date:"M d, Y H:i" }}
                                                 {% else %}
-                                                    -
+                                                    Expected: {{ reservation.expected_return_time|date:"M d, Y H:i" }}
                                                 {% endif %}
                                             </td>
                                             <td>
-                                                {% if not reservation.return_time %}
+                                                {% if not reservation.actual_return_time %}
                                                     <a href="{% url 'equipment_return' reservation.id %}" class="btn btn-sm btn-warning">
                                                         <i class="fas fa-undo-alt"></i> Return
                                                     </a>

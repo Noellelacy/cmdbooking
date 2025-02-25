@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">{{ action }} Equipment</h4>
+                </div>
+                <div class="card-body">
+                    <form method="post" class="needs-validation" novalidate>
+                        {% csrf_token %}
+                        
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {% for error in form.non_field_errors %}
+                            {{ error }}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <div class="row">
+                            <!-- Name and Equipment Type -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.name.id_for_label }}" class="form-label">Name*</label>
+                                {{ form.name }}
+                                {% if form.name.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.name.errors|join:", " }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.equipment_type.id_for_label }}" class="form-label">Equipment Type*</label>
+                                {{ form.equipment_type }}
+                                {% if form.equipment_type.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.equipment_type.errors|join:", " }}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Category and Serial Number -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.category.id_for_label }}" class="form-label">Category*</label>
+                                {{ form.category }}
+                                {% if form.category.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.category.errors|join:", " }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.serial_number.id_for_label }}" class="form-label">Serial Number</label>
+                                {{ form.serial_number }}
+                                {% if form.serial_number.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.serial_number.errors|join:", " }}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Inventory Number and Location -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.inventory_number.id_for_label }}" class="form-label">Inventory Number</label>
+                                {{ form.inventory_number }}
+                                {% if form.inventory_number.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.inventory_number.errors|join:", " }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.location.id_for_label }}" class="form-label">Location*</label>
+                                {{ form.location }}
+                                {% if form.location.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.location.errors|join:", " }}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Description -->
+                            <div class="col-12 mb-3">
+                                <label for="{{ form.description.id_for_label }}" class="form-label">Description</label>
+                                {{ form.description }}
+                                {% if form.description.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.description.errors|join:", " }}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Condition and Training Requirements -->
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.condition.id_for_label }}" class="form-label">Condition*</label>
+                                {{ form.condition }}
+                                {% if form.condition.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.condition.errors|join:", " }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.requires_training.id_for_label }}" class="form-label">Requires Training</label>
+                                <div class="form-check mt-2">
+                                    {{ form.requires_training }}
+                                    <label class="form-check-label" for="{{ form.requires_training.id_for_label }}">
+                                        Yes, training is required
+                                    </label>
+                                </div>
+                                {% if form.requires_training.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.requires_training.errors|join:", " }}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Notes -->
+                            <div class="col-12 mb-3">
+                                <label for="{{ form.notes.id_for_label }}" class="form-label">Notes</label>
+                                {{ form.notes }}
+                                {% if form.notes.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.notes.errors|join:", " }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{% url 'equipment_list_manage' %}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Back to List
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> {{ action }} Equipment
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    // Initialize form validation
+    (function () {
+        'use strict'
+        var forms = document.querySelectorAll('.needs-validation')
+        Array.prototype.slice.call(forms).forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                if (!form.checkValidity()) {
+                    event.preventDefault()
+                    event.stopPropagation()
+                }
+                form.classList.add('was-validated')
+            }, false)
+        })
+    })()
+</script>
+{% endblock %}
+{% endblock %}

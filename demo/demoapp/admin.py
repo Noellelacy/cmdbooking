@@ -19,6 +19,12 @@ class UserProfileInline(admin.StackedInline):
             'description': 'Specify whether this user is a student or faculty member.'
         }),
     )
+    
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        form = formset.form
+        form.base_fields['user_type'].initial = 'faculty'  # Set default to faculty for admin interface
+        return formset
 
 class CustomUserAdmin(UserAdmin):
     inlines = (UserProfileInline,)
@@ -121,17 +127,28 @@ class MultimediaEquipmentAdmin(admin.ModelAdmin):
     get_status.short_description = 'Status'
 
     def get_current_user(self, obj):
-        usage = EquipmentUsage.objects.filter(equipment=obj, return_time__isnull=True).first()
+        """Get the current user of the equipment."""
+        usage = EquipmentUsage.objects.filter(
+            equipment=obj,
+            status__in=['checked_out', 'overdue']
+        ).first()
         if usage:
-            url = reverse('admin:auth_user_change', args=[usage.user.id])
-            return format_html('<a href="{}">{}</a>', url, usage.user.username)
+            return format_html(
+                '<a href="{}">{}</a>',
+                reverse('admin:auth_user_change', args=[usage.user.id]),
+                usage.user.get_full_name() or usage.user.username
+            )
         return '-'
     get_current_user.short_description = 'Current User'
 
     def get_maintenance_status(self, obj):
-        maintenance = MaintenanceRecord.objects.filter(equipment=obj, resolved_date__isnull=True).first()
-        if maintenance:
-            return format_html('<span style="color: red;">Maintenance Required</span>')
+        """Get the maintenance status of the equipment."""
+        usage = EquipmentUsage.objects.filter(
+            equipment=obj,
+            status__in=['checked_out', 'overdue']
+        ).first()
+        if usage and usage.is_overdue():
+            return format_html('<span style="color: red;">Overdue</span>')
         return format_html('<span style="color: green;">OK</span>')
     get_maintenance_status.short_description = 'Maintenance'
 
@@ -143,8 +160,8 @@ class MultimediaEquipmentAdmin(admin.ModelAdmin):
 
 @admin.register(EquipmentUsage)
 class EquipmentUsageAdmin(admin.ModelAdmin):
-    list_display = ('equipment', 'user', 'get_user_type', 'checkout_time', 'return_time', 'get_status', 'course_code')
-    list_filter = ('return_time', 'user__userprofile__user_type', 'equipment__equipment_type')
+    list_display = ('equipment', 'user', 'get_user_type', 'checkout_time', 'actual_return_time', 'get_status', 'course_code')
+    list_filter = ('status', 'user__userprofile__user_type', 'equipment__equipment_type', 'checkout_time', 'actual_return_time')
     search_fields = ('equipment__name', 'user__username', 'course_code')
     raw_id_fields = ('user', 'equipment')
     
@@ -152,10 +169,19 @@ class EquipmentUsageAdmin(admin.ModelAdmin):
         ('Reservation Details', {
             'fields': (
                 ('equipment', 'user'),
-                ('checkout_time', 'return_time'),
+                ('checkout_time', 'expected_return_time', 'actual_return_time'),
                 'course_code',
-                'purpose'
+                'purpose',
+                'status'
             )
+        }),
+        ('Approval Details', {
+            'fields': (
+                'approved_by',
+                'approved_at',
+                'approval_notes'
+            ),
+            'classes': ('collapse',)
         }),
         ('Condition Notes', {
             'fields': ('condition_notes',),
@@ -166,17 +192,23 @@ class EquipmentUsageAdmin(admin.ModelAdmin):
     def get_user_type(self, obj):
         try:
             return obj.user.userprofile.get_user_type_display()
-        except UserProfile.DoesNotExist:
-            return 'Unknown'
+        except:
+            return 'N/A'
     get_user_type.short_description = 'User Type'
     get_user_type.admin_order_field = 'user__userprofile__user_type'
 
     def get_status(self, obj):
-        if obj.return_time:
-            return format_html('<span style="color: green;">Returned</span>')
-        if obj.checkout_time + timezone.timedelta(hours=obj.equipment.max_reservation_hours) < timezone.now():
-            return format_html('<span style="color: red;">Overdue</span>')
-        return format_html('<span style="color: orange;">Checked Out</span>')
+        status_colors = {
+            'pending': 'orange',
+            'approved': 'blue',
+            'rejected': 'red',
+            'checked_out': 'purple',
+            'returned': 'green',
+            'overdue': 'darkred'
+        }
+        color = status_colors.get(obj.status, 'black')
+        return format_html('<span style="color: {};">{}</span>', 
+                         color, obj.get_status_display())
     get_status.short_description = 'Status'
 
 @admin.register(EquipmentCategory)

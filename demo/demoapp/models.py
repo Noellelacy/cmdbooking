@@ -3,6 +3,8 @@ from django.utils.translation import gettext_lazy as _
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 class UserProfile(models.Model):
     USER_TYPES = (
@@ -78,20 +80,45 @@ class MultimediaEquipment(models.Model):
         verbose_name_plural = _('Multimedia Equipment')
 
 class EquipmentUsage(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('checked_out', 'Checked Out'),
+        ('returned', 'Returned'),
+        ('overdue', 'Overdue')
+    ]
+    
     equipment = models.ForeignKey(MultimediaEquipment, on_delete=models.CASCADE)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    checkout_time = models.DateTimeField(auto_now_add=True)
-    return_time = models.DateTimeField(null=True, blank=True)
-    purpose = models.TextField()
+    checkout_time = models.DateTimeField()
+    expected_return_time = models.DateTimeField()
+    actual_return_time = models.DateTimeField(null=True, blank=True)
     course_code = models.CharField(max_length=20, blank=True)
+    purpose = models.TextField()
     condition_notes = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_reservations')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approval_notes = models.TextField(blank=True)
     
     def __str__(self):
-        return f"{self.equipment.name} - {self.user.get_full_name()}"
+        return f"{self.equipment.name} - {self.user.username} ({self.checkout_time})"
+    
+    def is_overdue(self):
+        if self.actual_return_time:
+            return self.actual_return_time > self.expected_return_time
+        return timezone.now() > self.expected_return_time
+    
+    def save(self, *args, **kwargs):
+        if self.is_overdue() and self.status in ['checked_out', 'approved']:
+            self.status = 'overdue'
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = _('Equipment Usage')
         verbose_name_plural = _('Equipment Usage')
+        ordering = ['-checkout_time']
 
 class MaintenanceRecord(models.Model):
     equipment = models.ForeignKey(MultimediaEquipment, on_delete=models.CASCADE)
@@ -103,3 +130,15 @@ class MaintenanceRecord(models.Model):
     
     def __str__(self):
         return f"{self.equipment.name} - {self.reported_date.strftime('%Y-%m-%d')}"
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.create(user=instance)
+
+@receiver(post_save, sender=User)
+def save_user_profile(sender, instance, **kwargs):
+    try:
+        instance.userprofile.save()
+    except UserProfile.DoesNotExist:
+        UserProfile.objects.create(user=instance)

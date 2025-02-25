@@ -21,7 +21,10 @@ from demoapp.views import (
     equipment_list, my_reservations, equipment_return, dashboard,
     faculty_dashboard, equipment_list_manage, equipment_create,
     equipment_edit, equipment_delete, category_list, category_create,
-    category_edit, category_delete, faculty_login, faculty_logout_view
+    category_edit, category_delete, faculty_login, faculty_logout_view,
+    report_maintenance, manage_reservations, approve_reservation, 
+    reject_reservation, StudentEquipmentListView, mark_checked_out,
+    mark_returned
 )
 from django.contrib.auth.views import LogoutView
 
@@ -47,10 +50,17 @@ urlpatterns = [
     path('faculty/categories/add/', category_create, name='category_create'),
     path('faculty/categories/<int:pk>/edit/', category_edit, name='category_edit'),
     path('faculty/categories/<int:pk>/delete/', category_delete, name='category_delete'),
+    path('faculty/maintenance/report/', report_maintenance, name='report_maintenance'),
+    path('faculty/reservations/', manage_reservations, name='manage_reservations'),
+    path('faculty/reservations/<int:reservation_id>/approve/', approve_reservation, name='approve_reservation'),
+    path('faculty/reservations/<int:reservation_id>/reject/', reject_reservation, name='reject_reservation'),
+    path('faculty/reservations/<int:reservation_id>/checkout/', mark_checked_out, name='mark_checked_out'),
+    path('faculty/reservations/<int:reservation_id>/return/', mark_returned, name='mark_returned'),
     
-    # Admin URL
+    # Student URLs
+    path('student/equipment/', StudentEquipmentListView.as_view(), name='student_equipment_list'),
+    
+    # Admin
     path('admin/', admin.site.urls),
-    
-    # djreservation URLs
-    re_path(r'^reservation/', include(djreservation_urls)),
+    path('djreservation/', include(djreservation_urls)),
 ]
