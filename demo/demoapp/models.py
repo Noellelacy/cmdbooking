@@ -131,6 +131,29 @@ class MaintenanceRecord(models.Model):
     def __str__(self):
         return f"{self.equipment.name} - {self.reported_date.strftime('%Y-%m-%d')}"
 
+class CartItem(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    equipment = models.ForeignKey(MultimediaEquipment, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=1)
+    added_at = models.DateTimeField(auto_now_add=True)
+    start_time = models.DateTimeField(null=True, blank=True)
+    end_time = models.DateTimeField(null=True, blank=True)
+    purpose = models.TextField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('user', 'equipment')
+        ordering = ['-added_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.equipment.name}"
+
+    @property
+    def duration_hours(self):
+        if self.start_time and self.end_time:
+            duration = self.end_time - self.start_time
+            return duration.total_seconds() / 3600
+        return 0
+
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     """Create a UserProfile for every new user"""

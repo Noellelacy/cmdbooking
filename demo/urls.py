@@ -1,34 +1,22 @@
-"""demo URL Configuration
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/2.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
+"""demo URL Configuration"""
 from django.contrib import admin
 from django.urls import path, re_path, include
 from djreservation import urls as djreservation_urls
+from demoapp import views
 from demoapp.views import (
-    home, EquipmentReservation, signup, login_view, logout_view,
+    home, signup, login_view, logout_view,
     equipment_list, my_reservations, equipment_return, dashboard,
     faculty_dashboard, equipment_list_manage, equipment_create,
     equipment_edit, equipment_delete, category_list, category_create,
     category_edit, category_delete, faculty_login, faculty_logout_view,
     report_maintenance, manage_reservations, approve_reservation, 
     reject_reservation, StudentEquipmentListView, mark_checked_out,
-    mark_returned
+    mark_returned, refresh_csrf
 )
 from django.contrib.auth.views import LogoutView
 
 urlpatterns = [
+    path('admin/', admin.site.urls),
     path('', home, name='home'),
     path('signup/', signup, name='signup'),
     path('login/', login_view, name='login'),
@@ -57,10 +45,13 @@ urlpatterns = [
     path('faculty/reservations/<int:reservation_id>/checkout/', mark_checked_out, name='mark_checked_out'),
     path('faculty/reservations/<int:reservation_id>/return/', mark_returned, name='mark_returned'),
     
-    # Student URLs
-    path('student/equipment/', StudentEquipmentListView.as_view(), name='student_equipment_list'),
+    # Cart URLs
+    path('cart/', views.view_cart, name='view_cart'),
+    path('cart/add/<int:equipment_id>/', views.add_to_cart, name='add_to_cart'),
+    path('cart/remove/<int:item_id>/', views.remove_from_cart, name='remove_from_cart'),
+    path('cart/update/<int:item_id>/', views.update_cart_item, name='update_cart_item'),
+    path('cart/checkout/', views.checkout_cart, name='checkout_cart'),
     
-    # Admin
-    path('admin/', admin.site.urls),
-    path('djreservation/', include(djreservation_urls)),
+    # CSRF
+    path('csrf/refresh/', refresh_csrf, name='refresh_csrf'),
 ]

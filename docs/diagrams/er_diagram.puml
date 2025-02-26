@@ -1,0 +1,92 @@
+@startuml Equipment Reservation System - ER Diagram
+
+!define table(x) class x << (T,#FFAAAA) >>
+!define primary_key(x) <u>x</u>
+!define foreign_key(x) #x#
+
+' Define entities
+table(User) {
+    primary_key(id)
+    username
+    password
+    email
+    first_name
+    last_name
+    is_active
+    is_staff
+}
+
+table(UserProfile) {
+    primary_key(id)
+    foreign_key(user_id)
+    user_type
+    number
+}
+
+table(EquipmentCategory) {
+    primary_key(id)
+    name
+    description
+    foreign_key(created_by_id)
+    created_at
+}
+
+table(MultimediaEquipment) {
+    primary_key(id)
+    name
+    equipment_type
+    foreign_key(category_id)
+    serial_number
+    condition
+    inventory_number
+    location
+    description
+    is_available
+    max_reservation_hours
+    requires_training
+    notes
+    foreign_key(added_by_id)
+    foreign_key(last_modified_by_id)
+    last_maintained
+    created_at
+    updated_at
+}
+
+table(EquipmentUsage) {
+    primary_key(id)
+    foreign_key(equipment_id)
+    foreign_key(user_id)
+    checkout_time
+    expected_return_time
+    actual_return_time
+    course_code
+    purpose
+    condition_notes
+    status
+    foreign_key(approved_by_id)
+    approved_at
+    approval_notes
+}
+
+table(MaintenanceRecord) {
+    primary_key(id)
+    foreign_key(equipment_id)
+    foreign_key(reported_by_id)
+    issue_description
+    reported_date
+    resolved_date
+    resolution_notes
+}
+
+' Define relationships
+User "1" -- "1" UserProfile
+User "1" -- "*" EquipmentUsage
+User "1" -- "*" MaintenanceRecord
+User "1" -- "*" EquipmentCategory : creates
+User "1" -- "*" MultimediaEquipment : adds/modifies
+
+EquipmentCategory "1" -- "*" MultimediaEquipment
+MultimediaEquipment "1" -- "*" EquipmentUsage
+MultimediaEquipment "1" -- "*" MaintenanceRecord
+
+@enduml

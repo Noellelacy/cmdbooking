@@ -1,0 +1,69 @@
+@startuml Equipment Reservation System - Use Case Diagram
+
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+
+actor Student
+actor Faculty
+actor System
+
+rectangle "Equipment Reservation System" {
+    ' Student Use Cases
+    package "Student Functions" {
+        usecase "Login/Logout" as SLogin
+        usecase "View Available Equipment" as ViewEquip
+        usecase "Reserve Equipment" as Reserve
+        usecase "View My Reservations" as ViewRes
+        usecase "Return Equipment" as Return
+        usecase "Report Equipment Issues" as ReportIssue
+    }
+
+    ' Faculty Use Cases
+    package "Faculty Functions" {
+        usecase "Manage Equipment" as ManageEquip
+        usecase "Manage Categories" as ManageCat
+        usecase "Manage Reservations" as ManageRes
+        usecase "View Dashboard Statistics" as ViewStats
+        usecase "Report Maintenance Issues" as ReportMaint
+        usecase "View Maintenance Records" as ViewMaint
+    }
+
+    ' System Use Cases
+    package "System Functions" {
+        usecase "Track Equipment Status" as TrackStatus
+        usecase "Monitor Overdue Equipment" as MonitorOverdue
+        usecase "Send Notifications" as SendNotif
+        usecase "Update Equipment Availability" as UpdateAvail
+    }
+
+    ' Relationships - Student
+    Student --> SLogin
+    Student --> ViewEquip
+    Student --> Reserve
+    Student --> ViewRes
+    Student --> Return
+    Student --> ReportIssue
+
+    ' Relationships - Faculty
+    Faculty --> SLogin
+    Faculty --> ManageEquip
+    Faculty --> ManageCat
+    Faculty --> ManageRes
+    Faculty --> ViewStats
+    Faculty --> ReportMaint
+    Faculty --> ViewMaint
+
+    ' Relationships - System
+    System --> TrackStatus
+    System --> MonitorOverdue
+    System --> SendNotif
+    System --> UpdateAvail
+
+    ' Include relationships
+    Reserve .> ViewEquip : <<include>>
+    ManageRes .> ViewRes : <<include>>
+    Return .> ViewRes : <<include>>
+    ReportMaint .> ViewMaint : <<include>>
+}
+
+@enduml

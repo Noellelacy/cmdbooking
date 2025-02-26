@@ -1,0 +1,41 @@
+@startuml Equipment Reservation Process
+
+actor Student
+participant "Web Interface" as UI
+participant "Reservation System" as System
+participant "Database" as DB
+actor Faculty
+
+Student -> UI: Browse Available Equipment
+UI -> System: Request Equipment List
+System -> DB: Query Available Equipment
+DB --> System: Return Equipment List
+System --> UI: Display Equipment
+UI --> Student: Show Available Equipment
+
+Student -> UI: Submit Reservation Request
+UI -> System: Create Reservation
+System -> DB: Save Reservation (status=pending)
+DB --> System: Confirm Save
+System --> UI: Show Confirmation
+UI --> Student: Display Reservation Status
+
+System -> Faculty: Notify New Reservation
+Faculty -> UI: Review Reservation
+Faculty -> UI: Approve/Reject Request
+UI -> System: Update Reservation Status
+System -> DB: Update Status
+DB --> System: Confirm Update
+
+alt Approved
+    System --> UI: Show Approval
+    UI --> Student: Notify Approval
+    Student -> UI: Checkout Equipment
+    UI -> System: Record Checkout
+    System -> DB: Update Equipment Status
+else Rejected
+    System --> UI: Show Rejection
+    UI --> Student: Notify Rejection
+end
+
+@enduml

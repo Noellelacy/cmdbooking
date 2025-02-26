@@ -1,0 +1,34 @@
+@startuml Equipment Maintenance Process
+
+actor "User (Student/Faculty)" as User
+participant "Web Interface" as UI
+participant "Maintenance System" as System
+participant "Database" as DB
+actor Faculty
+
+User -> UI: Report Equipment Issue
+UI -> System: Create Maintenance Record
+System -> DB: Save Maintenance Record
+DB --> System: Confirm Save
+System -> Faculty: Notify New Issue
+System --> UI: Show Confirmation
+UI --> User: Display Report Status
+
+Faculty -> UI: Review Maintenance Record
+Faculty -> UI: Update Issue Status
+UI -> System: Update Maintenance Record
+System -> DB: Save Resolution
+DB --> System: Confirm Update
+
+alt Issue Resolved
+    System -> DB: Update Equipment Status
+    DB --> System: Confirm Update
+    System --> UI: Show Resolution
+    UI --> User: Notify Resolution
+else Needs Further Attention
+    System -> Faculty: Schedule Maintenance
+    System --> UI: Update Status
+    UI --> User: Notify Status
+end
+
+@enduml

@@ -1,0 +1,41 @@
+@startuml Equipment Management Activity Diagram
+
+|Student|
+start
+:Login to System;
+:Browse Equipment;
+
+if (Equipment Available?) then (yes)
+  :Submit Reservation Request;
+  |Faculty|
+  :Review Request;
+  if (Approve?) then (yes)
+    :Approve Request;
+    |Student|
+    :Receive Approval;
+    :Checkout Equipment;
+    :Use Equipment;
+    :Return Equipment;
+    |Faculty|
+    :Verify Return Condition;
+    if (Equipment OK?) then (yes)
+      :Mark as Available;
+    else (no)
+      :Create Maintenance Record;
+      :Update Equipment Status;
+    endif
+  else (no)
+    :Reject Request;
+    |Student|
+    :Receive Rejection;
+  endif
+else (no)
+  :View Alternative Equipment;
+endif
+
+|System|
+:Update Equipment Status;
+:Send Notifications;
+stop
+
+@enduml

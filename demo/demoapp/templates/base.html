@@ -93,7 +93,7 @@
             <i class="fas fa-user me-1"></i>
             Welcome, {{ user.username }}!
           </span>
-          <form method="post" action="{% url 'logout' %}" class="m-0 d-inline">
+          <form method="post" action="{% url 'logout' %}" class="m-0 d-inline" id="logoutForm">
             {% csrf_token %}
             <button type="submit" class="btn btn-link nav-link">Logout</button>
           </form>
@@ -117,26 +117,31 @@
     {% endblock %}
     </div>
 
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
     <script>
-      // Set up CSRF token for AJAX requests
-      document.addEventListener('DOMContentLoaded', function() {
-        // Get CSRF token from meta tag
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        
-        // Add CSRF token to all AJAX requests
-        document.addEventListener('submit', function(e) {
-          if (e.target.tagName === 'FORM' && e.target.method.toLowerCase() === 'post') {
-            // Check if CSRF token input exists
-            if (!e.target.querySelector('input[name="csrfmiddlewaretoken"]')) {
-              const csrfInput = document.createElement('input');
-              csrfInput.type = 'hidden';
-              csrfInput.name = 'csrfmiddlewaretoken';
-              csrfInput.value = csrfToken;
-              e.target.appendChild(csrfInput);
-            }
-          }
+      function updateCsrfToken() {
+        $.get("{% url 'refresh_csrf' %}", function(data) {
+          $('[name="csrfmiddlewaretoken"]').val(data.csrf_token);
         });
+      }
+
+      // Refresh token periodically (every 15 minutes)
+      setInterval(updateCsrfToken, 15 * 60 * 1000);
+
+      // Refresh token when page becomes visible (user switches tabs)
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') {
+          updateCsrfToken();
+        }
+      });
+
+      // Refresh token before form submission
+      document.getElementById('logoutForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        updateCsrfToken();
+        setTimeout(() => this.submit(), 100);
       });
     </script>
     {% block js %}{% endblock %}

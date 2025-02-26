@@ -22,12 +22,13 @@
 
     <div class="card">
         <div class="card-body">
-            <form method="post">
+            <form method="post" class="needs-validation" novalidate>
                 {% csrf_token %}
                 
                 <div class="row g-3">
+                    <!-- Basic Equipment Details -->
                     <div class="col-md-6">
-                        <label for="{{ form.name.id_for_label }}" class="form-label">Name</label>
+                        <label for="{{ form.name.id_for_label }}" class="form-label">Name*</label>
                         {{ form.name }}
                         {% if form.name.errors %}
                         <div class="text-danger small">{{ form.name.errors|join:", " }}</div>
@@ -35,7 +36,7 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label for="{{ form.equipment_type.id_for_label }}" class="form-label">Equipment Type</label>
+                        <label for="{{ form.equipment_type.id_for_label }}" class="form-label">Equipment Type*</label>
                         {{ form.equipment_type }}
                         {% if form.equipment_type.errors %}
                         <div class="text-danger small">{{ form.equipment_type.errors|join:", " }}</div>
@@ -43,7 +44,7 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label for="{{ form.category.id_for_label }}" class="form-label">Category</label>
+                        <label for="{{ form.category.id_for_label }}" class="form-label">Category*</label>
                         {{ form.category }}
                         {% if form.category.errors %}
                         <div class="text-danger small">{{ form.category.errors|join:", " }}</div>
@@ -51,7 +52,7 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label for="{{ form.serial_number.id_for_label }}" class="form-label">Serial Number</label>
+                        <label for="{{ form.serial_number.id_for_label }}" class="form-label">Serial Number*</label>
                         {{ form.serial_number }}
                         {% if form.serial_number.errors %}
                         <div class="text-danger small">{{ form.serial_number.errors|join:", " }}</div>
@@ -59,7 +60,24 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label for="{{ form.condition.id_for_label }}" class="form-label">Condition</label>
+                        <label for="{{ form.inventory_number.id_for_label }}" class="form-label">Inventory Number*</label>
+                        {{ form.inventory_number }}
+                        {% if form.inventory_number.errors %}
+                        <div class="text-danger small">{{ form.inventory_number.errors|join:", " }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Location & Status -->
+                    <div class="col-md-6">
+                        <label for="{{ form.location.id_for_label }}" class="form-label">Location*</label>
+                        {{ form.location }}
+                        {% if form.location.errors %}
+                        <div class="text-danger small">{{ form.location.errors|join:", " }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="{{ form.condition.id_for_label }}" class="form-label">Condition*</label>
                         {{ form.condition }}
                         {% if form.condition.errors %}
                         <div class="text-danger small">{{ form.condition.errors|join:", " }}</div>
@@ -67,15 +85,20 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label for="{{ form.location.id_for_label }}" class="form-label">Location</label>
-                        {{ form.location }}
-                        {% if form.location.errors %}
-                        <div class="text-danger small">{{ form.location.errors|join:", " }}</div>
+                        <div class="form-check mt-4">
+                            {{ form.requires_training }}
+                            <label class="form-check-label" for="{{ form.requires_training.id_for_label }}">
+                                Requires Training
+                            </label>
+                        </div>
+                        {% if form.requires_training.errors %}
+                        <div class="text-danger small">{{ form.requires_training.errors|join:", " }}</div>
                         {% endif %}
                     </div>
 
+                    <!-- Additional Information -->
                     <div class="col-12">
-                        <label for="{{ form.description.id_for_label }}" class="form-label">Description</label>
+                        <label for="{{ form.description.id_for_label }}" class="form-label">Description*</label>
                         {{ form.description }}
                         {% if form.description.errors %}
                         <div class="text-danger small">{{ form.description.errors|join:", " }}</div>
@@ -93,7 +116,7 @@
 
                 <div class="mt-4">
                     <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save me-1"></i> Save Equipment
+                        <i class="fas fa-save me-1"></i> {{ action }} Equipment
                     </button>
                     <a href="{% url 'equipment_list_manage' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
                 </div>
@@ -101,4 +124,23 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Initialize form validation
+    (function () {
+        'use strict'
+        var forms = document.querySelectorAll('.needs-validation')
+        Array.prototype.slice.call(forms).forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                if (!form.checkValidity()) {
+                    event.preventDefault()
+                    event.stopPropagation()
+                }
+                form.classList.add('was-validated')
+            }, false)
+        })
+    })()
+</script>
 {% endblock %}
