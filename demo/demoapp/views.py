@@ -85,37 +85,52 @@ def login_view(request):
 @ensure_csrf_cookie
 def faculty_login(request):
     """Faculty login view"""
-    # If user is already logged in and is faculty, redirect to dashboard
     if request.user.is_authenticated:
         try:
             if request.user.userprofile.is_faculty():
                 return redirect('faculty_dashboard')
             messages.error(request, 'You do not have faculty privileges.')
             return redirect('login')
-        except:
-            pass
+        except UserProfile.DoesNotExist:
+            messages.error(request, 'User profile not found.')
+            return redirect('faculty_login')
+
+    context = {
+        'next': request.GET.get('next', '')
+    }
+    context.update(csrf(request))
 
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
+
+        if not username or not password:
+            messages.error(request, 'Please provide both username and password.')
+            return render(request, 'faculty/faculty_login.html', context)
+
         user = authenticate(request, username=username, password=password)
         
         if user is not None:
             try:
-                if not user.userprofile.is_faculty():
-                    messages.error(request, 'You do not have faculty privileges.')
+                profile = user.userprofile
+                if not profile.is_faculty():
+                    messages.error(request, 'You do not have faculty privileges. Please use the student login.')
                     return redirect('login')
-            except:
-                messages.error(request, 'Invalid faculty account.')
-                return redirect('faculty_login')
+                
+                login(request, user)
+                messages.success(request, f'Welcome back, Professor {user.get_full_name() or user.username}!')
+                next_url = request.POST.get('next', '')
+                if next_url and next_url.startswith('/'):
+                    return redirect(next_url)
+                return redirect('faculty_dashboard')
             
-            login(request, user)
-            messages.success(request, f'Welcome back, Professor {user.get_full_name() or user.username}!')
-            return redirect('faculty_dashboard')
+            except UserProfile.DoesNotExist:
+                messages.error(request, 'Faculty profile not found. Please contact the administrator.')
+                return render(request, 'faculty/faculty_login.html', context)
         else:
             messages.error(request, 'Invalid username or password.')
     
-    return render(request, 'faculty/faculty_login.html', {'next': request.GET.get('next', '')})
+    return render(request, 'faculty/faculty_login.html', context)
 
 @login_required
 @require_http_methods(["POST"])

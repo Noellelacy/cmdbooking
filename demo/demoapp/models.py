@@ -133,12 +133,23 @@ class MaintenanceRecord(models.Model):
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
+    """Create a UserProfile for every new user"""
     if created:
-        UserProfile.objects.create(user=instance)
+        try:
+            # Only create if it doesn't exist
+            UserProfile.objects.get_or_create(
+                user=instance,
+                defaults={'user_type': 'student'}  # Default to student type
+            )
+        except Exception:
+            pass
 
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
+    """Save the UserProfile when the User is saved"""
     try:
-        instance.userprofile.save()
+        # Only save if profile exists, don't create new ones here
+        if hasattr(instance, 'userprofile'):
+            instance.userprofile.save()
     except UserProfile.DoesNotExist:
-        UserProfile.objects.create(user=instance)
+        pass  # Don't create profile here, let create_user_profile handle it
