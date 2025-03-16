@@ -22,7 +22,7 @@
 
     <div class="card">
         <div class="card-body">
-            <form method="post" class="needs-validation" novalidate>
+            <form method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
                 {% csrf_token %}
                 
                 <div class="row g-3">
@@ -96,6 +96,38 @@
                         {% endif %}
                     </div>
 
+                    <div class="col-12">
+                        <hr>
+                        <h5>Quantity Management</h5>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="{{ form.total_quantity.id_for_label }}" class="form-label">Total Quantity*</label>
+                        {{ form.total_quantity }}
+                        <div class="form-text">Total number of units</div>
+                        {% if form.total_quantity.errors %}
+                        <div class="text-danger small">{{ form.total_quantity.errors|join:", " }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="{{ form.available_quantity.id_for_label }}" class="form-label">Available Quantity*</label>
+                        {{ form.available_quantity }}
+                        <div class="form-text">Currently available units</div>
+                        {% if form.available_quantity.errors %}
+                        <div class="text-danger small">{{ form.available_quantity.errors|join:", " }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="{{ form.min_alert_threshold.id_for_label }}" class="form-label">Alert Threshold*</label>
+                        {{ form.min_alert_threshold }}
+                        <div class="form-text">Low stock warning level</div>
+                        {% if form.min_alert_threshold.errors %}
+                        <div class="text-danger small">{{ form.min_alert_threshold.errors|join:", " }}</div>
+                        {% endif %}
+                    </div>
+
                     <!-- Additional Information -->
                     <div class="col-12">
                         <label for="{{ form.description.id_for_label }}" class="form-label">Description*</label>
@@ -112,6 +144,26 @@
                         <div class="text-danger small">{{ form.notes.errors|join:", " }}</div>
                         {% endif %}
                     </div>
+
+                    <!-- Image Upload Section -->
+                    <div class="col-12 mt-4">
+                        <h5>Equipment Image</h5>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="{{ form.image.id_for_label }}" class="form-label">Upload Image</label>
+                        {{ form.image }}
+                        <div class="form-text">Upload an image of the equipment to help students identify it.</div>
+                        {% if form.image.errors %}
+                        <div class="text-danger small">{{ form.image.errors|join:", " }}</div>
+                        {% endif %}
+                        {% if form.instance.image %}
+                        <div class="mt-2">
+                            <p>Current image:</p>
+                            <img src="{{ form.instance.image.url }}" alt="{{ form.instance.name }}" class="img-thumbnail" style="max-height: 200px;">
+                        </div>
+                        {% endif %}
+                    </div>
+
                 </div>
 
                 <div class="mt-4">

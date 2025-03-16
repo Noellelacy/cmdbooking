@@ -44,7 +44,7 @@ class SignUpForm(UserCreationForm):
 
     class Meta:
         model = User
-        fields = ('username', 'email', 'first_name', 'last_name', 'number', 'password1', 'password2')
+        fields = ('username', 'email', 'first_name', 'last_name', 'number', 'password1', 'password2', 'user_type')
 
     def clean_email(self):
         email = self.cleaned_data.get('email')
@@ -66,15 +66,7 @@ class SignUpForm(UserCreationForm):
         
         if commit:
             user.save()
-            try:
-                UserProfile.objects.create(
-                    user=user,
-                    user_type='student',
-                    number=self.cleaned_data['number']
-                )
-            except Exception as e:
-                user.delete()  # Rollback user creation if profile creation fails
-                raise forms.ValidationError(f"Error creating account: {str(e)}")
+            # Profile creation is now handled in the view
         return user
 
 class CategoryForm(forms.ModelForm):
@@ -98,7 +90,8 @@ class MultimediaEquipmentForm(forms.ModelForm):
     class Meta:
         model = MultimediaEquipment
         fields = ['name', 'equipment_type', 'category', 'serial_number', 'inventory_number', 
-                 'location', 'description', 'condition', 'requires_training', 'notes']
+                 'location', 'description', 'condition', 'requires_training', 'notes',
+                 'total_quantity', 'available_quantity', 'min_alert_threshold', 'image']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'required': True}),
             'equipment_type': forms.Select(attrs={'class': 'form-control', 'required': True}),
@@ -110,6 +103,10 @@ class MultimediaEquipmentForm(forms.ModelForm):
             'condition': forms.Select(attrs={'class': 'form-control', 'required': True}),
             'requires_training': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'total_quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'required': True}),
+            'available_quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'required': True}),
+            'min_alert_threshold': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'required': True}),
+            'image': forms.FileInput(attrs={'class': 'form-control'}),
         }
 
     def __init__(self, *args, **kwargs):

@@ -1,0 +1,506 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<style>
+    .analytics-card {
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        transition: transform 0.2s;
+    }
+    .analytics-card:hover {
+        transform: translateY(-5px);
+    }
+    .card-header {
+        background-color: rgba(var(--bs-primary-rgb), 0.1);
+        border-bottom: none;
+        font-weight: 600;
+    }
+    .kpi-box {
+        text-align: center;
+        padding: 1.5rem;
+    }
+    .kpi-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: var(--bs-primary);
+    }
+    .kpi-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    .chart-container {
+        position: relative;
+        height: 300px;
+        width: 100%;
+    }
+    .table-responsive {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    .filter-form {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    .trend-indicator {
+        font-size: 0.9rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+    .trend-up { background-color: #d4edda; color: #155724; }
+    .trend-down { background-color: #f8d7da; color: #721c24; }
+    .download-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Filters -->
+    <div class="filter-form">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Date Range</label>
+                <input type="text" name="daterange" class="form-control" 
+                       value="{{ start_date|date:'m/d/Y' }} - {{ end_date|date:'m/d/Y' }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Period</label>
+                <select name="period" class="form-select">
+                    <option value="week" {% if selected_period == 'week' %}selected{% endif %}>Week</option>
+                    <option value="month" {% if selected_period == 'month' %}selected{% endif %}>Month</option>
+                    <option value="quarter" {% if selected_period == 'quarter' %}selected{% endif %}>Quarter</option>
+                    <option value="year" {% if selected_period == 'year' %}selected{% endif %}>Year</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Category</label>
+                <select name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for category in categories %}
+                    <option value="{{ category.id }}" {% if selected_category == category.id %}selected{% endif %}>
+                        {{ category.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <div class="d-flex align-items-end h-100">
+                    <button type="submit" class="btn btn-primary">Apply Filters</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Period Comparison -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="analytics-card">
+                <div class="card-body">
+                    <h5 class="card-title">Period Comparison</h5>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="h3">{{ current_period_count }}</span>
+                            <span class="text-muted ms-2">current period reservations</span>
+                        </div>
+                        <div>
+                            <span class="trend-indicator {% if usage_change_percent > 0 %}trend-up{% else %}trend-down{% endif %}">
+                                {% if usage_change_percent > 0 %}↑{% else %}↓{% endif %}
+                                {{ usage_change_percent|abs }}%
+                            </span>
+                            <span class="text-muted ms-2">vs previous period ({{ prev_period_count }} reservations)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Equipment Quantity Trends -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="analytics-card">
+                <div class="card-header">
+                    <h5 class="mb-0">Equipment Quantity Trends</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Equipment</th>
+                                    <th>Total Quantity</th>
+                                    <th>Available</th>
+                                    <th>Low Stock Incidents</th>
+                                    <th>Avg Daily Usage</th>
+                                    <th>Days Until Restock</th>
+                                    <th>Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for trend in quantity_trends %}
+                                <tr>
+                                    <td>
+                                        <a href="{% url 'equipment_detail_analytics' equipment_id=trend.equipment_id %}" class="text-decoration-none">
+                                            {{ trend.equipment_name }}
+                                            <i class="fas fa-chart-line ms-1 text-muted"></i>
+                                        </a>
+                                    </td>
+                                    <td>{{ trend.total_quantity }}</td>
+                                    <td>
+                                        <span class="badge {% if trend.available_quantity <= trend.total_quantity|divisibleby:4 %}bg-danger
+                                                       {% elif trend.available_quantity <= trend.total_quantity|divisibleby:2 %}bg-warning
+                                                       {% else %}bg-success{% endif %}">
+                                            {{ trend.available_quantity }}
+                                        </span>
+                                    </td>
+                                    <td>{{ trend.low_stock_incidents }}</td>
+                                    <td>{{ trend.avg_daily_usage }}</td>
+                                    <td>
+                                        {% if trend.days_until_restock %}
+                                            {% if trend.days_until_restock <= 7 %}
+                                                <span class="badge bg-danger">{{ trend.days_until_restock }} days</span>
+                                            {% elif trend.days_until_restock <= 14 %}
+                                                <span class="badge bg-warning">{{ trend.days_until_restock }} days</span>
+                                            {% else %}
+                                                <span class="badge bg-success">{{ trend.days_until_restock }} days</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="badge bg-secondary">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <canvas id="trend-{{ forloop.counter }}" height="50"></canvas>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Performance Indicators -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card analytics-card h-100">
+                <div class="kpi-box">
+                    <i class="fas fa-chart-pie fa-2x mb-3 text-primary"></i>
+                    <div class="kpi-value">{{ utilization_rate }}%</div>
+                    <div class="kpi-label">Equipment Utilization Rate</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card analytics-card h-100">
+                <div class="kpi-box">
+                    <i class="fas fa-clock fa-2x mb-3 text-warning"></i>
+                    <div class="kpi-value">{{ avg_duration }} hrs</div>
+                    <div class="kpi-label">Average Reservation Duration</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card analytics-card h-100">
+                <div class="kpi-box">
+                    <i class="fas fa-calendar-week fa-2x mb-3 text-success"></i>
+                    <div class="kpi-value">{{ max_duration }} hrs</div>
+                    <div class="kpi-label">Longest Reservation</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Usage Patterns -->
+    <div class="row mb-4">
+        <!-- Hours Chart -->
+        <div class="col-md-6">
+            <div class="card analytics-card">
+                <div class="card-header">
+                    <i class="fas fa-chart-line me-2"></i>Peak Usage Times (By Hour)
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="hoursChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Days Chart -->
+        <div class="col-md-6">
+            <div class="card analytics-card">
+                <div class="card-header">
+                    <i class="fas fa-chart-bar me-2"></i>Peak Usage Days
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="daysChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Equipment Performance -->
+    <div class="row mb-4">
+        <!-- Popular Equipment -->
+        <div class="col-md-6">
+            <div class="card analytics-card">
+                <div class="card-header">
+                    <i class="fas fa-star me-2"></i>Most Popular Equipment
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Equipment</th>
+                                    <th>Type</th>
+                                    <th>Usage Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in popular_equipment %}
+                                <tr>
+                                    <td>{{ item.equipment__name }}</td>
+                                    <td>{{ item.equipment__equipment_type }}</td>
+                                    <td><span class="badge bg-success">{{ item.usage_count }}</span></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center">No data available</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Underutilized Equipment -->
+        <div class="col-md-6">
+            <div class="card analytics-card">
+                <div class="card-header">
+                    <i class="fas fa-battery-quarter me-2"></i>Underutilized Equipment
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Equipment</th>
+                                    <th>Type</th>
+                                    <th>Usage Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in underutilized_equipment %}
+                                <tr>
+                                    <td>{{ item.name }}</td>
+                                    <td>{{ item.equipment_type }}</td>
+                                    <td>
+                                        {% if item.usage_count == 0 %}
+                                            <span class="badge bg-danger">{{ item.usage_count }}</span>
+                                        {% else %}
+                                            <span class="badge bg-warning">{{ item.usage_count }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center">No data available</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Additional Analyses -->
+    <div class="row mb-4">
+        <!-- Category Usage -->
+        <div class="col-md-6">
+            <div class="card analytics-card">
+                <div class="card-header">
+                    <i class="fas fa-tags me-2"></i>Equipment Usage by Category
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Overbooked Equipment -->
+        <div class="col-md-6">
+            <div class="card analytics-card">
+                <div class="card-header">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Frequently Overbooked Equipment
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Equipment</th>
+                                    <th>Rejection Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in overbooked_equipment %}
+                                <tr>
+                                    <td>{{ item.equipment__name }}</td>
+                                    <td><span class="badge bg-danger">{{ item.reject_count }}</span></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="2" class="text-center">No data available</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/moment/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    // Initialize daterangepicker
+    $('input[name="daterange"]').daterangepicker({
+        startDate: moment('{{ start_date|date:"Y-m-d" }}'),
+        endDate: moment('{{ end_date|date:"Y-m-d" }}'),
+        locale: {
+            format: 'MM/DD/YYYY'
+        }
+    });
+
+    // Initialize charts
+    const hoursCtx = document.getElementById('hoursChart').getContext('2d');
+    const daysCtx = document.getElementById('daysChart').getContext('2d');
+    
+    // Hours chart
+    new Chart(hoursCtx, {
+        type: 'line',
+        data: {
+            labels: Array.from({length: 24}, (_, i) => i),
+            datasets: [{
+                label: 'Hourly Usage',
+                data: {{ hours_data|safe }},
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Equipment Usage by Hour'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+
+    // Days chart
+    new Chart(daysCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+            datasets: [{
+                label: 'Daily Usage',
+                data: {{ days_data|safe }},
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgb(75, 192, 192)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Equipment Usage by Day'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+
+    // Add trend sparklines for each equipment
+    {% for trend in quantity_trends %}
+    const trendCtx{{ forloop.counter }} = document.getElementById('trend-{{ forloop.counter }}').getContext('2d');
+    new Chart(trendCtx{{ forloop.counter }}, {
+        type: 'line',
+        data: {
+            labels: {{ trend.utilization_data|safe }}.map(d => d.date),
+            datasets: [{
+                data: {{ trend.utilization_data|safe }}.map(d => d.usage),
+                borderColor: 'rgb(75, 192, 192)',
+                borderWidth: 1,
+                pointRadius: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    enabled: false
+                }
+            },
+            scales: {
+                x: {
+                    display: false
+                },
+                y: {
+                    display: false
+                }
+            }
+        }
+    });
+    {% endfor %}
+});
+</script>
+{% endblock %}

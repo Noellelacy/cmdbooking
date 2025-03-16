@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Available Equipment</h2>
+        {% if not is_faculty %}
+        <div>
+            <a href="{% url 'view_cart' %}" class="btn btn-primary">
+                <i class="fas fa-shopping-cart me-1"></i> View Cart
+                <span class="badge bg-light text-dark ms-1" id="cart-count">0</span>
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if messages %}
+    <div class="messages mb-4">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
+    <!-- Search and Filter -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <div class="input-group">
+                        <input type="text" name="search" class="form-control" placeholder="Search equipment..." value="{{ request.GET.search|default:'' }}">
+                        <button class="btn btn-outline-secondary" type="submit">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select name="category" class="form-select">
+                        <option value="">All Categories</option>
+                        {% for category in categories %}
+                        <option value="{{ category.id }}" {% if request.GET.category == category.id|stringformat:"s" %}selected{% endif %}>{{ category.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select name="type" class="form-select">
+                        <option value="">All Types</option>
+                        {% for type_code, type_name in equipment_types %}
+                        <option value="{{ type_code }}" {% if request.GET.type == type_code %}selected{% endif %}>{{ type_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">Filter</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="row row-cols-1 row-cols-md-3 g-4">
+        {% for equipment in equipment_list %}
+        <div class="col">
+            <div class="card h-100">
+                {% if equipment.image %}
+                <img src="{{ equipment.image.url }}" class="card-img-top" alt="{{ equipment.name }}" style="height: 200px; object-fit: contain; padding: 10px;">
+                {% else %}
+                <div class="text-center py-4 bg-light">
+                    <i class="fas fa-camera fa-4x text-muted"></i>
+                    <p class="mt-2 text-muted">No image available</p>
+                </div>
+                {% endif %}
+                <div class="card-body">
+                    <h5 class="card-title">{{ equipment.name }}</h5>
+                    <p class="text-muted small mb-2">
+                        {{ equipment.get_equipment_type_display }} | 
+                        {{ equipment.category.name }}
+                    </p>
+                    <p class="card-text">{{ equipment.description }}</p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        {% if equipment.available_quantity > equipment.min_alert_threshold %}
+                            <span class="badge bg-success">In Stock ({{ equipment.available_quantity }})</span>
+                        {% elif equipment.available_quantity > 0 %}
+                            <span class="badge bg-warning text-dark">Limited Stock ({{ equipment.available_quantity }})</span>
+                        {% else %}
+                            <span class="badge bg-danger">Out of Stock</span>
+                        {% endif %}
+                        
+                        {% if not is_faculty and equipment.available_quantity > 0 %}
+                        <form method="post" action="{% url 'add_to_cart' equipment.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <div class="input-group input-group-sm mb-2">
+                                <span class="input-group-text">Qty</span>
+                                <input type="number" name="quantity" class="form-control" value="1" min="1" max="{{ equipment.available_quantity }}" style="width: 60px;">
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i class="fas fa-cart-plus me-1"></i> Add to Cart
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col">
+            <div class="alert alert-info">
+                No equipment available at this time.
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Pagination -->
+    <nav aria-label="Page navigation" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}">
+                    <i class="fas fa-chevron-left"></i> Previous
+                </a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link"><i class="fas fa-chevron-left"></i> Previous</span>
+            </li>
+            {% endif %}
+            
+            {% for num in page_obj.paginator.page_range %}
+                {% if num == page_obj.number %}
+                <li class="page-item active">
+                    <span class="page-link">{{ num }}</span>
+                </li>
+                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ num }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}">{{ num }}</a>
+                </li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}">
+                    Next <i class="fas fa-chevron-right"></i>
+                </a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">Next <i class="fas fa-chevron-right"></i></span>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+{% endblock %}

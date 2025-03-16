@@ -31,9 +31,12 @@
                 <table class="table table-hover">
                     <thead>
                         <tr>
+                            <th>Image</th>
                             <th>Name</th>
                             <th>Type</th>
                             <th>Location</th>
+                            <th>Total Quantity</th>
+                            <th>Available</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -41,14 +44,33 @@
                     <tbody>
                         {% for item in equipment %}
                         <tr>
+                            <td>
+                                {% if item.image %}
+                                <img src="{{ item.image.url }}" alt="{{ item.name }}" class="img-thumbnail" style="width: 70px; height: 70px; object-fit: cover;">
+                                {% else %}
+                                <div class="text-center bg-light rounded p-2" style="width: 70px; height: 70px; display: flex; align-items: center; justify-content: center;">
+                                    <i class="fas fa-camera text-muted"></i>
+                                </div>
+                                {% endif %}
+                            </td>
                             <td>{{ item.name }}</td>
                             <td>{{ item.get_equipment_type_display }}</td>
                             <td>{{ item.location }}</td>
+                            <td>{{ item.total_quantity }}</td>
                             <td>
-                                {% if item.is_available %}
-                                <span class="badge bg-success">Available</span>
+                                {% if item.available_quantity > item.min_alert_threshold %}
+                                    <span class="badge bg-success">{{ item.available_quantity }} available</span>
+                                {% elif item.available_quantity > 0 %}
+                                    <span class="badge bg-warning text-dark">{{ item.available_quantity }} left</span>
                                 {% else %}
-                                <span class="badge bg-danger">Not Available</span>
+                                    <span class="badge bg-danger">Out of stock</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if item.available_quantity > 0 %}
+                                    <span class="badge bg-success">Available</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Not Available</span>
                                 {% endif %}
                             </td>
                             <td>
@@ -64,7 +86,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="5" class="text-center py-4">
+                            <td colspan="8" class="text-center py-4">
                                 <div class="text-muted">No equipment found</div>
                                 <a href="{% url 'equipment_create' %}" class="btn btn-primary mt-2">
                                     <i class="fas fa-plus me-1"></i> Add Equipment

@@ -1,0 +1,55 @@
+@startuml Authentication Process
+
+skinparam sequence {
+    ParticipantBackgroundColor LightBlue
+    ActorBackgroundColor White
+    DatabaseBackgroundColor LightGray
+}
+
+actor "User\n(Student/Faculty)" as User
+participant "Web Interface" as UI
+participant "Auth\nController" as Auth
+participant "Profile\nManager" as Profile
+database "Database" as DB
+
+== Registration ==
+User -> UI: Access Registration Form
+UI -> Auth: Request Registration Form
+Auth --> UI: Display Form
+
+User -> UI: Submit Registration
+UI -> Auth: Process Registration
+Auth -> DB: Create User Account
+DB --> Auth: Confirm User Created
+Auth -> Profile: Create User Profile
+Profile -> DB: Save Profile
+DB --> Profile: Confirm Profile
+Auth --> UI: Registration Success
+
+== Login ==
+User -> UI: Submit Login
+UI -> Auth: Process Login
+Auth -> DB: Verify Credentials
+DB --> Auth: User Data
+Auth -> Profile: Get User Type
+Profile -> DB: Query Profile
+DB --> Profile: Profile Data
+Profile --> Auth: User Type
+Auth --> UI: Login Success + Role
+
+== Password Reset ==
+User -> UI: Request Password Reset
+UI -> Auth: Process Reset Request
+Auth -> DB: Verify User
+DB --> Auth: User Exists
+Auth -> Auth: Generate Reset Token
+Auth -> UI: Send Reset Email
+UI --> User: Display Instructions
+
+User -> UI: Submit New Password
+UI -> Auth: Process Password Update
+Auth -> DB: Update Password
+DB --> Auth: Confirm Update
+Auth --> UI: Password Updated
+
+@enduml

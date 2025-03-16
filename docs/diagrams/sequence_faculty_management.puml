@@ -1,0 +1,69 @@
+@startuml Faculty Equipment Management Process
+
+skinparam sequence {
+    ParticipantBackgroundColor LightBlue
+    ActorBackgroundColor White
+    DatabaseBackgroundColor LightGray
+}
+
+actor Faculty
+participant "Web Interface" as UI
+participant "Equipment\nManager" as EqMgmt
+participant "Reservation\nController" as ResCtrl
+participant "Maintenance\nTracker" as MaintCtrl
+database "Database" as DB
+
+== Equipment Management ==
+Faculty -> UI: Add/Edit Equipment
+UI -> EqMgmt: Process Equipment Data
+EqMgmt -> DB: Save Equipment
+DB --> EqMgmt: Confirm Save
+EqMgmt --> UI: Show Success
+
+== Category Management ==
+Faculty -> UI: Manage Categories
+UI -> EqMgmt: Process Category
+EqMgmt -> DB: Save Category
+DB --> EqMgmt: Confirm Save
+EqMgmt --> UI: Update Category List
+
+== Reservation Approval ==
+Faculty -> UI: View Pending Reservations
+UI -> ResCtrl: Get Pending List
+ResCtrl -> DB: Query Reservations
+DB --> ResCtrl: Reservation List
+ResCtrl --> UI: Display Reservations
+
+Faculty -> UI: Approve/Reject Reservation
+UI -> ResCtrl: Update Status
+ResCtrl -> DB: Update Reservation
+DB --> ResCtrl: Confirm Update
+ResCtrl -> EqMgmt: Update Equipment Status
+EqMgmt -> DB: Update Equipment
+DB --> EqMgmt: Confirm Update
+ResCtrl --> UI: Show Updated Status
+
+== Maintenance Management ==
+Faculty -> UI: Record Maintenance
+UI -> MaintCtrl: Create Record
+MaintCtrl -> DB: Save Maintenance Record
+DB --> MaintCtrl: Confirm Save
+MaintCtrl -> EqMgmt: Update Equipment Status
+EqMgmt -> DB: Update Equipment
+DB --> EqMgmt: Confirm Update
+MaintCtrl --> UI: Show Confirmation
+
+== View Reports ==
+Faculty -> UI: Request Reports
+UI -> ResCtrl: Get Usage Stats
+ResCtrl -> DB: Query Usage Data
+DB --> ResCtrl: Usage Data
+UI -> MaintCtrl: Get Maintenance Stats
+MaintCtrl -> DB: Query Maintenance Data
+DB --> MaintCtrl: Maintenance Data
+UI -> EqMgmt: Get Equipment Stats
+EqMgmt -> DB: Query Equipment Data
+DB --> EqMgmt: Equipment Data
+UI --> Faculty: Display Dashboard
+
+@enduml

@@ -36,6 +36,16 @@
                                 {{ item.equipment.get_equipment_type_display }} | 
                                 {{ item.equipment.category.name }}
                             </p>
+                            <div class="mb-2">
+                                <span class="badge bg-primary">Current Quantity: {{ item.quantity }}</span>
+                                {% if item.equipment.available_quantity > item.equipment.min_alert_threshold %}
+                                    <span class="badge bg-success">Available: {{ item.equipment.available_quantity }}</span>
+                                {% elif item.equipment.available_quantity > 0 %}
+                                    <span class="badge bg-warning text-dark">Limited Stock: {{ item.equipment.available_quantity }}</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Out of Stock</span>
+                                {% endif %}
+                            </div>
                         </div>
                         <form method="post" action="{% url 'remove_from_cart' item.id %}" class="d-inline">
                             {% csrf_token %}
@@ -49,23 +59,31 @@
                         {% csrf_token %}
                         <div class="row g-3">
                             <div class="col-md-6">
-                                <label class="form-label">Start Time*</label>
-                                <input type="datetime-local" name="start_time" class="form-control" 
+                                <label for="quantity_{{ item.id }}" class="form-label">Quantity</label>
+                                <div class="input-group">
+                                    <button type="button" class="btn btn-outline-secondary" onclick="decrementQuantity('quantity_{{ item.id }}')">-</button>
+                                    <input type="number" class="form-control" id="quantity_{{ item.id }}" name="quantity" 
+                                           value="{{ item.quantity }}" min="1" max="{{ item.equipment.available_quantity }}" required>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="incrementQuantity('quantity_{{ item.id }}', {{ item.equipment.available_quantity }})">+</button>
+                                </div>
+                                <div class="form-text">Maximum available: {{ item.equipment.available_quantity }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="start_time_{{ item.id }}" class="form-label">Start Time</label>
+                                <input type="datetime-local" class="form-control" id="start_time_{{ item.id }}" name="start_time" 
                                        value="{{ item.start_time|date:'Y-m-d\TH:i' }}" required>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">End Time*</label>
-                                <input type="datetime-local" name="end_time" class="form-control" 
+                                <label for="end_time_{{ item.id }}" class="form-label">End Time</label>
+                                <input type="datetime-local" class="form-control" id="end_time_{{ item.id }}" name="end_time" 
                                        value="{{ item.end_time|date:'Y-m-d\TH:i' }}" required>
                             </div>
-                            <div class="col-12">
-                                <label class="form-label">Purpose of Reservation*</label>
-                                <textarea name="purpose" class="form-control" rows="2" required>{{ item.purpose }}</textarea>
+                            <div class="col-md-12">
+                                <label for="purpose_{{ item.id }}" class="form-label">Purpose of Reservation</label>
+                                <textarea class="form-control" id="purpose_{{ item.id }}" name="purpose" rows="2" required>{{ item.purpose }}</textarea>
                             </div>
                             <div class="col-12">
-                                <button type="submit" class="btn btn-outline-primary btn-sm">
-                                    <i class="fas fa-save me-1"></i> Update Details
-                                </button>
+                                <button type="submit" class="btn btn-primary">Update Details</button>
                             </div>
                         </div>
                     </form>
@@ -103,6 +121,11 @@
     // Add client-side validation for reservation times
     document.querySelectorAll('form').forEach(form => {
         form.addEventListener('submit', function(e) {
+            // Skip validation for removal forms (they don't have date fields)
+            if (!this.querySelector('[name="start_time"]') || !this.querySelector('[name="end_time"]')) {
+                return;
+            }
+            
             const startTime = new Date(this.querySelector('[name="start_time"]')?.value);
             const endTime = new Date(this.querySelector('[name="end_time"]')?.value);
             
@@ -110,15 +133,41 @@
                 if (startTime >= endTime) {
                     e.preventDefault();
                     alert('End time must be after start time');
+                    return;
                 }
                 
                 if (startTime < new Date()) {
                     e.preventDefault();
                     alert('Start time cannot be in the past');
+                    return;
+                }
+                
+                // Check if the reservation exceeds 24 hours
+                const timeDiffHours = (endTime - startTime) / (1000 * 60 * 60);
+                if (timeDiffHours > 24) {
+                    e.preventDefault();
+                    alert(`Reservation duration cannot exceed 24 hours. Your requested duration: ${timeDiffHours.toFixed(1)} hours.`);
+                    return;
                 }
             }
         });
     });
+
+    function decrementQuantity(id) {
+        const input = document.getElementById(id);
+        const currentValue = parseInt(input.value);
+        if (currentValue > 1) {
+            input.value = currentValue - 1;
+        }
+    }
+
+    function incrementQuantity(id, max) {
+        const input = document.getElementById(id);
+        const currentValue = parseInt(input.value);
+        if (currentValue < max) {
+            input.value = currentValue + 1;
+        }
+    }
 </script>
 {% endblock %}
 {% endblock %}

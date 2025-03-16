@@ -13,6 +13,7 @@
     <style>
       :root {
         --primary-color: #007bff;
+        --primary-color-rgb: 0, 123, 255;
         --text-color: #333;
         --bg-color: #ffffff;
         --input-border: #ddd;
@@ -76,6 +77,36 @@
         background: rgba(255,255,255,.1);
         text-decoration: none;
       }
+      
+      .navbar .dropdown-menu {
+        border-radius: 0.25rem;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        border: none;
+      }
+      
+      .navbar .dropdown-item {
+        padding: 0.5rem 1.5rem;
+        font-weight: 500;
+      }
+      
+      .navbar .dropdown-item:hover {
+        background-color: rgba(var(--primary-color-rgb), 0.1);
+      }
+      
+      .navbar-dark .navbar-toggler {
+        border-color: rgba(255, 255, 255, 0.1);
+      }
+      
+      .welcome-text {
+        color: rgba(255, 255, 255, 0.9);
+        font-weight: 500;
+      }
+      
+      @media (max-width: 991.98px) {
+        .welcome-text {
+          display: none;
+        }
+      }
     </style>
     {% block css %}{% endblock %}
   </head>
@@ -84,19 +115,54 @@
       <div class="container">
         <a class="navbar-brand" href="/">
           <i class="fas fa-boxes me-2"></i>
-          LOGO
+          Equipment Booking System
         </a>
         
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        
         {% if user.is_authenticated %}
-        <div class="ms-auto d-flex align-items-center">
-          <span class="welcome-text">
-            <i class="fas fa-user me-1"></i>
-            Welcome, {{ user.username }}!
-          </span>
-          <form method="post" action="{% url 'logout' %}" class="m-0 d-inline" id="logoutForm">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-link nav-link">Logout</button>
-          </form>
+        <div class="collapse navbar-collapse" id="navbarNavDropdown">
+          <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+            {% if not user.userprofile.is_faculty %}
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="studentDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Student Menu
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="studentDropdown">
+                <li><a class="dropdown-item" href="{% url 'dashboard' %}"><i class="fas fa-tachometer-alt me-2"></i>My Dashboard</a></li>
+                <li><a class="dropdown-item" href="{% url 'equipment_list' %}"><i class="fas fa-laptop me-2"></i>Browse Equipment</a></li>
+                <li><a class="dropdown-item" href="{% url 'my_reservations' %}"><i class="fas fa-calendar-check me-2"></i>My Reservations</a></li>
+              </ul>
+            </li>
+            {% else %}
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="facultyDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Faculty Menu
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="facultyDropdown">
+                <li><a class="dropdown-item" href="{% url 'faculty_dashboard' %}"><i class="fas fa-tachometer-alt me-2"></i>Dashboard</a></li>
+                <li><a class="dropdown-item" href="{% url 'faculty_analytics' %}"><i class="fas fa-chart-line me-2"></i>Analytics</a></li>
+                <li><a class="dropdown-item" href="{% url 'equipment_list_manage' %}"><i class="fas fa-laptop me-2"></i>Manage Equipment</a></li>
+                <li><a class="dropdown-item" href="{% url 'category_list' %}"><i class="fas fa-tags me-2"></i>Equipment Categories</a></li>
+                <li><a class="dropdown-item" href="{% url 'manage_reservations' %}"><i class="fas fa-calendar-check me-2"></i>Manage Reservations</a></li>
+              </ul>
+            </li>
+            {% endif %}
+            <li class="nav-item">
+              <span class="nav-link welcome-text">
+                <i class="fas fa-user me-1"></i>
+                Welcome, {{ user.username }}!
+              </span>
+            </li>
+            <li class="nav-item">
+              <form method="post" action="{% url 'logout' %}" class="m-0 d-inline" id="logoutForm">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-link nav-link">Logout</button>
+              </form>
+            </li>
+          </ul>
         </div>
         {% endif %}
       </div>
@@ -121,29 +187,28 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-      function updateCsrfToken() {
-        $.get("{% url 'refresh_csrf' %}", function(data) {
-          $('[name="csrfmiddlewaretoken"]').val(data.csrf_token);
+      // Function to refresh CSRF token
+      function refreshCSRFToken() {
+        $.get("{% url 'refresh_csrf' %}", function(token) {
+          $('input[name="csrfmiddlewaretoken"]').val(token);
         });
       }
 
-      // Refresh token periodically (every 15 minutes)
-      setInterval(updateCsrfToken, 15 * 60 * 1000);
-
-      // Refresh token when page becomes visible (user switches tabs)
-      document.addEventListener('visibilitychange', function() {
-        if (document.visibilityState === 'visible') {
-          updateCsrfToken();
-        }
-      });
-
-      // Refresh token before form submission
-      document.getElementById('logoutForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        updateCsrfToken();
-        setTimeout(() => this.submit(), 100);
+      $(document).ready(function() {
+        // Refresh CSRF token when page loads
+        refreshCSRFToken();
+        
+        // Also refresh token when user interacts with any form
+        $('form').on('mouseenter', function() {
+          refreshCSRFToken();
+        });
+        
+        // Refresh token periodically (every 10 minutes)
+        setInterval(refreshCSRFToken, 10 * 60 * 1000);
       });
     </script>
+
+    {% block extra_js %}{% endblock %}
     {% block js %}{% endblock %}
   </body>
 </html>

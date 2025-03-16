@@ -5,15 +5,17 @@ from djreservation import urls as djreservation_urls
 from demoapp import views
 from demoapp.views import (
     home, signup, login_view, logout_view,
-    equipment_list, my_reservations, equipment_return, dashboard,
+    my_reservations, equipment_return, dashboard,
     faculty_dashboard, equipment_list_manage, equipment_create,
     equipment_edit, equipment_delete, category_list, category_create,
     category_edit, category_delete, faculty_login, faculty_logout_view,
     report_maintenance, manage_reservations, approve_reservation, 
     reject_reservation, StudentEquipmentListView, mark_checked_out,
-    mark_returned, refresh_csrf
+    mark_returned, refresh_csrf, faculty_analytics
 )
 from django.contrib.auth.views import LogoutView
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -21,7 +23,8 @@ urlpatterns = [
     path('signup/', signup, name='signup'),
     path('login/', login_view, name='login'),
     path('logout/', logout_view, name='logout'),
-    path('equipment/', equipment_list, name='equipment_list'),
+    path('refresh-csrf/', refresh_csrf, name='refresh_csrf'),
+    path('equipment/', StudentEquipmentListView.as_view(), name='equipment_list'),
     path('reservations/', my_reservations, name='my_reservations'),
     path('equipment/return/<int:usage_id>/', equipment_return, name='equipment_return'),
     path('dashboard/', dashboard, name='dashboard'),
@@ -29,6 +32,7 @@ urlpatterns = [
     # Faculty URLs
     path('faculty/login/', faculty_login, name='faculty_login'),
     path('faculty/dashboard/', faculty_dashboard, name='faculty_dashboard'),
+    path('faculty/analytics/', faculty_analytics, name='faculty_analytics'),
     path('faculty/logout/', faculty_logout_view, name='faculty_logout'),
     path('faculty/equipment/', equipment_list_manage, name='equipment_list_manage'),
     path('faculty/equipment/add/', equipment_create, name='equipment_create'),
@@ -55,3 +59,7 @@ urlpatterns = [
     # CSRF
     path('csrf/refresh/', refresh_csrf, name='refresh_csrf'),
 ]
+
+# Add these lines to serve media files during development
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

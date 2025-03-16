@@ -3,6 +3,7 @@ from django.utils.translation import gettext_lazy as _
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.utils import timezone
+import os
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -66,6 +67,14 @@ class MultimediaEquipment(models.Model):
     updated_at = models.DateTimeField(default=timezone.now)
     last_modified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='equipment_modified')
     
+    # New quantity fields
+    total_quantity = models.IntegerField(default=1, help_text="Total number of this equipment available")
+    available_quantity = models.IntegerField(default=1, help_text="Current number available for reservation")
+    min_alert_threshold = models.IntegerField(default=1, help_text="Minimum threshold to show limited stock warning")
+    
+    # Equipment image field
+    image = models.ImageField(upload_to='equipment_images/', blank=True, null=True, help_text="Upload an image of the equipment")
+    
     def __str__(self):
         return f"{self.name} ({self.get_equipment_type_display()})"
     
@@ -101,9 +110,10 @@ class EquipmentUsage(models.Model):
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_reservations')
     approved_at = models.DateTimeField(null=True, blank=True)
     approval_notes = models.TextField(blank=True)
+    quantity = models.PositiveIntegerField(default=1)
     
     def __str__(self):
-        return f"{self.equipment.name} - {self.user.username} ({self.checkout_time})"
+        return f"{self.equipment.name} (x{self.quantity}) - {self.user.username} ({self.checkout_time})"
     
     def is_overdue(self):
         if self.actual_return_time:
@@ -139,19 +149,18 @@ class CartItem(models.Model):
     start_time = models.DateTimeField(null=True, blank=True)
     end_time = models.DateTimeField(null=True, blank=True)
     purpose = models.TextField(null=True, blank=True)
-
+    
     class Meta:
         unique_together = ('user', 'equipment')
         ordering = ['-added_at']
-
+    
     def __str__(self):
-        return f"{self.user.username} - {self.equipment.name}"
-
-    @property
+        return f"{self.user.username} - {self.equipment.name} x{self.quantity}"
+        
     def duration_hours(self):
         if self.start_time and self.end_time:
-            duration = self.end_time - self.start_time
-            return duration.total_seconds() / 3600
+            delta = self.end_time - self.start_time
+            return delta.total_seconds() / 3600
         return 0
 
 @receiver(post_save, sender=User)

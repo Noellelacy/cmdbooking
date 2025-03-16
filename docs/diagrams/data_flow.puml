@@ -1,0 +1,58 @@
+@startuml Equipment Reservation System - Data Flow Diagram
+
+!define PROCESS(name) rectangle name #LightBlue
+!define DATASTORE(name) database name #LightGray
+!define EXTERNAL(name) actor name #White
+
+' External Entities
+EXTERNAL(Student)
+EXTERNAL(Faculty)
+
+' Main Processes
+PROCESS("1.0\nAuthentication") as Auth
+PROCESS("2.0\nEquipment\nManagement") as EqMgmt
+PROCESS("3.0\nReservation\nManagement") as ResMgmt
+PROCESS("4.0\nMaintenance\nTracking") as MaintMgmt
+PROCESS("5.0\nCart\nManagement") as CartMgmt
+
+' Data Stores
+DATASTORE("User\nProfiles") as UserDB
+DATASTORE("Equipment\nInventory") as EquipDB
+DATASTORE("Reservations") as ResDB
+DATASTORE("Maintenance\nRecords") as MaintDB
+DATASTORE("Shopping\nCart") as CartDB
+
+' Student Data Flows
+Student --> Auth : Login credentials
+Auth --> Student : Authentication status
+Student --> CartMgmt : Add/remove items
+CartMgmt --> Student : Cart status
+Student --> ResMgmt : Submit reservation
+ResMgmt --> Student : Reservation status
+
+' Faculty Data Flows
+Faculty --> Auth : Login credentials
+Auth --> Faculty : Authentication status
+Faculty --> EqMgmt : Equipment updates
+EqMgmt --> Faculty : Equipment status
+Faculty --> ResMgmt : Approve/reject reservations
+ResMgmt --> Faculty : Reservation updates
+Faculty --> MaintMgmt : Maintenance records
+MaintMgmt --> Faculty : Maintenance status
+
+' Process to Data Store Flows
+Auth <--> UserDB : User data
+EqMgmt <--> EquipDB : Equipment data
+ResMgmt <--> ResDB : Reservation data
+MaintMgmt <--> MaintDB : Maintenance data
+CartMgmt <--> CartDB : Cart data
+
+' Inter-Process Flows
+Auth --> EqMgmt : User permissions
+Auth --> ResMgmt : User permissions
+CartMgmt --> ResMgmt : Cart items for reservation
+EqMgmt --> ResMgmt : Equipment availability
+ResMgmt --> EqMgmt : Update equipment status
+MaintMgmt --> EqMgmt : Equipment condition updates
+
+@enduml

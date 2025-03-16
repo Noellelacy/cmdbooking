@@ -123,6 +123,10 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
+# Media files (User uploaded files)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 DEFAULT_FROM_EMAIL = "mail@example.com"
 EMAIL_HOST = "localhost"
 EMAIL_PORT = "1025"

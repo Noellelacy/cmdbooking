@@ -1,0 +1,65 @@
+@startuml Student Equipment Reservation Process
+
+skinparam sequence {
+    ParticipantBackgroundColor LightBlue
+    ActorBackgroundColor White
+    DatabaseBackgroundColor LightGray
+}
+
+actor Student
+participant "Web Interface" as UI
+participant "Cart Manager" as Cart
+participant "Reservation\nController" as ResCtrl
+participant "Equipment\nManager" as EqMgmt
+database "Database" as DB
+
+== Browse & Add to Cart ==
+Student -> UI: Browse Equipment
+UI -> EqMgmt: Get Available Equipment
+EqMgmt -> DB: Query Equipment
+DB --> EqMgmt: Equipment List
+EqMgmt --> UI: Display Equipment
+Student -> UI: Add to Cart
+UI -> Cart: Add Equipment
+Cart -> DB: Save Cart Item
+DB --> Cart: Confirm Save
+Cart --> UI: Update Cart Display
+
+== Checkout Process ==
+Student -> UI: View Cart
+UI -> Cart: Get Cart Items
+Cart -> DB: Query Cart
+DB --> Cart: Cart Items
+Cart --> UI: Display Cart
+
+Student -> UI: Proceed to Checkout
+UI -> Cart: Start Checkout
+Cart -> ResCtrl: Create Reservation
+ResCtrl -> DB: Save Reservation(status=pending)
+DB --> ResCtrl: Confirm Save
+ResCtrl -> Cart: Clear Cart Items
+Cart -> DB: Delete Cart Items
+DB --> Cart: Confirm Delete
+ResCtrl --> UI: Show Confirmation
+
+== Wait for Approval ==
+note over Student, DB: Faculty Reviews Reservation
+
+== Equipment Pickup ==
+Student -> UI: View Approved Reservation
+UI -> ResCtrl: Get Reservation Details
+ResCtrl -> DB: Query Reservation
+DB --> ResCtrl: Reservation Details
+ResCtrl --> UI: Show Pickup Instructions
+
+== Return Process ==
+Student -> UI: Return Equipment
+UI -> ResCtrl: Update Status
+ResCtrl -> DB: Update Reservation(status=returned)
+DB --> ResCtrl: Confirm Update
+ResCtrl -> EqMgmt: Update Equipment Status
+EqMgmt -> DB: Update Equipment
+DB --> EqMgmt: Confirm Update
+ResCtrl --> UI: Show Return Confirmation
+
+@enduml

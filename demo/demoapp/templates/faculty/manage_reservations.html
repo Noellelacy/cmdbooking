@@ -46,6 +46,7 @@
             <thead>
                 <tr>
                     <th>Equipment</th>
+                    <th>Quantity</th>
                     <th>Student</th>
                     <th>Course</th>
                     <th>Checkout Time</th>
@@ -58,18 +59,21 @@
                 {% for reservation in reservations %}
                 <tr>
                     <td>{{ reservation.equipment.name }}</td>
+                    <td>
+                        <span class="badge bg-secondary">x{{ reservation.quantity }}</span>
+                    </td>
                     <td>{{ reservation.user.get_full_name }}</td>
                     <td>{{ reservation.course_code }}</td>
                     <td>{{ reservation.checkout_time|date:"Y-m-d H:i" }}</td>
                     <td>{{ reservation.expected_return_time|date:"Y-m-d H:i" }}</td>
                     <td>
                         <span class="badge {% if reservation.status == 'pending' %}bg-warning
-                                         {% elif reservation.status == 'approved' %}bg-success
-                                         {% elif reservation.status == 'rejected' %}bg-danger
-                                         {% elif reservation.status == 'checked_out' %}bg-info
-                                         {% elif reservation.status == 'returned' %}bg-secondary
-                                         {% elif reservation.status == 'overdue' %}bg-danger
-                                         {% endif %}">
+                                          {% elif reservation.status == 'approved' %}bg-success
+                                          {% elif reservation.status == 'rejected' %}bg-danger
+                                          {% elif reservation.status == 'checked_out' %}bg-info
+                                          {% elif reservation.status == 'returned' %}bg-secondary
+                                          {% elif reservation.status == 'overdue' %}bg-danger
+                                          {% endif %}">
                             {{ reservation.get_status_display }}
                         </span>
                     </td>
@@ -90,7 +94,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7" class="text-center">No reservations found.</td>
+                    <td colspan="8" class="text-center">No reservations found.</td>
                 </tr>
                 {% endfor %}
             </tbody>

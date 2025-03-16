@@ -1,0 +1,444 @@
+{% extends 'base.html' %}
+
+{% block css %}
+{{ block.super }}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vis-timeline@7.7.0/dist/vis-timeline-graph2d.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css">
+<style>
+    .analytics-card {
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        transition: transform 0.2s;
+    }
+    .analytics-card:hover {
+        transform: translateY(-5px);
+    }
+    .card-header {
+        background-color: rgba(var(--bs-primary-rgb), 0.1);
+        border-bottom: none;
+        font-weight: 600;
+    }
+    .chart-container {
+        position: relative;
+        height: 300px;
+        width: 100%;
+    }
+    .stat-card {
+        text-align: center;
+        padding: 1.5rem;
+    }
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--bs-primary);
+    }
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+    }
+    #timeline {
+        width: 100%;
+        height: 400px;
+        margin: 20px 0;
+    }
+    .vis-item {
+        border-radius: 3px;
+        border-width: 1px;
+    }
+    .vis-item.reservation {
+        background-color: rgba(75, 192, 192, 0.2);
+        border-color: rgb(75, 192, 192);
+    }
+    .vis-item.maintenance {
+        background-color: rgba(255, 206, 86, 0.2);
+        border-color: rgb(255, 206, 86);
+    }
+    .vis-item.repair {
+        background-color: rgba(255, 99, 132, 0.2);
+        border-color: rgb(255, 99, 132);
+    }
+    .vis-item.overlap {
+        background-color: rgba(255, 99, 132, 0.4);
+        border-color: rgb(255, 99, 132);
+        font-weight: bold;
+    }
+    .timeline-legend {
+        display: flex;
+        gap: 20px;
+        margin: 10px 0;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 5px;
+    }
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 3px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Back to Analytics -->
+    <div class="mb-4">
+        <a href="{% url 'demoapp:faculty_analytics' %}" class="btn btn-outline-primary">
+            <i class="fas fa-arrow-left"></i> Back to Analytics Dashboard
+        </a>
+    </div>
+
+    <!-- Equipment Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>{{ equipment.name }} - Detailed Analytics</h2>
+            <p class="text-muted">{{ equipment.description }}</p>
+        </div>
+    </div>
+
+    <!-- Date Filter -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card analytics-card">
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Date Range</label>
+                            <input type="text" name="daterange" class="form-control" 
+                                   value="{{ start_date|date:'m/d/Y' }} - {{ end_date|date:'m/d/Y' }}">
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary">Apply Filter</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Stats -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card analytics-card">
+                <div class="stat-card">
+                    <div class="stat-value">{{ total_reservations }}</div>
+                    <div class="stat-label">Total Reservations</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card analytics-card">
+                <div class="stat-card">
+                    <div class="stat-value">{{ unique_users }}</div>
+                    <div class="stat-label">Unique Users</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card analytics-card">
+                <div class="stat-card">
+                    <div class="stat-value">{{ utilization_rate }}%</div>
+                    <div class="stat-label">Utilization Rate</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card analytics-card">
+                <div class="stat-card">
+                    <div class="stat-value">{{ avg_duration|default:0|floatformat:1 }}h</div>
+                    <div class="stat-label">Average Usage Duration</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interactive Timeline -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card analytics-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Equipment Timeline</h5>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-primary" id="zoomIn">
+                            <i class="fas fa-search-plus"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" id="zoomOut">
+                            <i class="fas fa-search-minus"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" id="moveLeft">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" id="moveRight">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" id="fitAll">
+                            <i class="fas fa-expand-arrows-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="timeline-legend">
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: rgba(75, 192, 192, 0.2); border: 1px solid rgb(75, 192, 192);"></div>
+                            <span>Reservations</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: rgba(255, 206, 86, 0.2); border: 1px solid rgb(255, 206, 86);"></div>
+                            <span>Maintenance</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: rgba(255, 99, 132, 0.2); border: 1px solid rgb(255, 99, 132);"></div>
+                            <span>Repairs</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: rgba(255, 99, 132, 0.4); border: 1px solid rgb(255, 99, 132);"></div>
+                            <span>Overlapping Reservations</span>
+                        </div>
+                    </div>
+                    <div id="timeline"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Usage Patterns -->
+    <div class="row mb-4">
+        <!-- Daily Usage Chart -->
+        <div class="col-md-8">
+            <div class="card analytics-card">
+                <div class="card-header">
+                    <h5 class="mb-0">Daily Usage Pattern</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="dailyUsageChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Hourly Usage Chart -->
+        <div class="col-md-4">
+            <div class="card analytics-card">
+                <div class="card-header">
+                    <h5 class="mb-0">Usage by Hour</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="hourlyUsageChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User and Department Analysis -->
+    <div class="row mb-4">
+        <!-- Top Users -->
+        <div class="col-md-6">
+            <div class="card analytics-card">
+                <div class="card-header">
+                    <h5 class="mb-0">Top Users</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Department</th>
+                                    <th>Total Uses</th>
+                                    <th>Avg Duration</th>
+                                    <th>Last Used</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stat in user_stats %}
+                                <tr>
+                                    <td>{{ stat.user__username }}</td>
+                                    <td>{{ stat.user__userprofile__department }}</td>
+                                    <td>{{ stat.total_reservations }}</td>
+                                    <td>{{ stat.avg_duration|default:0|floatformat:1 }}h</td>
+                                    <td>{{ stat.last_used|date:"M d, Y" }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Department Usage -->
+        <div class="col-md-6">
+            <div class="card analytics-card">
+                <div class="card-header">
+                    <h5 class="mb-0">Department Usage</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="departmentUsageChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rejection Analysis -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card analytics-card">
+                <div class="card-header">
+                    <h5 class="mb-0">Rejection Analysis</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="rejectionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/moment/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vis-timeline@7.7.0/dist/vis-timeline-graph2d.min.js"></script>
+
+<script>
+    // Initialize daterangepicker
+    $('input[name="daterange"]').daterangepicker({
+        startDate: moment('{{ start_date|date:"Y-m-d" }}'),
+        endDate: moment('{{ end_date|date:"Y-m-d" }}'),
+        locale: {
+            format: 'MM/DD/YYYY'
+        }
+    });
+
+    // Timeline setup
+    const timelineContainer = document.getElementById('timeline');
+    const items = new vis.DataSet({{ timeline_data|safe }});
+    
+    const options = {
+        height: '400px',
+        min: moment('{{ start_date|date:"Y-m-d" }}').toDate(),
+        max: moment('{{ end_date|date:"Y-m-d" }}').toDate(),
+        stack: true,
+        showMajorLabels: true,
+        showMinorLabels: true,
+        zoomMin: 1000 * 60 * 60 * 24,  // One day
+        zoomMax: 1000 * 60 * 60 * 24 * 31 * 3,  // Three months
+        template: function(item) {
+            return `
+                <div class="timeline-item">
+                    <div class="item-title">${item.content}</div>
+                    ${item.description ? `<div class="item-description">${item.description}</div>` : ''}
+                </div>
+            `;
+        }
+    };
+    
+    const timeline = new vis.Timeline(timelineContainer, items, options);
+    
+    // Timeline controls
+    document.getElementById('zoomIn').addEventListener('click', function() {
+        timeline.zoomIn(0.5);
+    });
+    
+    document.getElementById('zoomOut').addEventListener('click', function() {
+        timeline.zoomOut(0.5);
+    });
+    
+    document.getElementById('moveLeft').addEventListener('click', function() {
+        const currentWindow = timeline.getWindow();
+        const interval = currentWindow.end - currentWindow.start;
+        timeline.setWindow(
+            currentWindow.start - interval * 0.3,
+            currentWindow.end - interval * 0.3
+        );
+    });
+    
+    document.getElementById('moveRight').addEventListener('click', function() {
+        const currentWindow = timeline.getWindow();
+        const interval = currentWindow.end - currentWindow.start;
+        timeline.setWindow(
+            currentWindow.start + interval * 0.3,
+            currentWindow.end + interval * 0.3
+        );
+    });
+    
+    document.getElementById('fitAll').addEventListener('click', function() {
+        timeline.fit();
+    });
+
+    // Initialize charts
+    const dailyUsageCtx = document.getElementById('dailyUsageChart').getContext('2d');
+    new Chart(dailyUsageCtx, {
+        type: 'line',
+        data: {{ daily_usage_data|safe }},
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Number of Reservations'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                }
+            }
+        }
+    });
+
+    const hourlyUsageCtx = document.getElementById('hourlyUsageChart').getContext('2d');
+    new Chart(hourlyUsageCtx, {
+        type: 'bar',
+        data: {{ hourly_usage_data|safe }},
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Number of Reservations'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Hour of Day'
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}
