@@ -11,7 +11,8 @@ from demoapp.views import (
     category_edit, category_delete, faculty_login, faculty_logout_view,
     report_maintenance, manage_reservations, approve_reservation, 
     reject_reservation, StudentEquipmentListView, mark_checked_out,
-    mark_returned, refresh_csrf, faculty_analytics
+    mark_returned, refresh_csrf, faculty_analytics, equipment_detail_analytics,
+    manage_blacklist, blacklist_student, remove_from_blacklist
 )
 from django.contrib.auth.views import LogoutView
 from django.conf import settings
@@ -33,6 +34,7 @@ urlpatterns = [
     path('faculty/login/', faculty_login, name='faculty_login'),
     path('faculty/dashboard/', faculty_dashboard, name='faculty_dashboard'),
     path('faculty/analytics/', faculty_analytics, name='faculty_analytics'),
+    path('faculty/equipment/<int:equipment_id>/analytics/', equipment_detail_analytics, name='equipment_detail_analytics'),
     path('faculty/logout/', faculty_logout_view, name='faculty_logout'),
     path('faculty/equipment/', equipment_list_manage, name='equipment_list_manage'),
     path('faculty/equipment/add/', equipment_create, name='equipment_create'),
@@ -48,6 +50,11 @@ urlpatterns = [
     path('faculty/reservations/<int:reservation_id>/reject/', reject_reservation, name='reject_reservation'),
     path('faculty/reservations/<int:reservation_id>/checkout/', mark_checked_out, name='mark_checked_out'),
     path('faculty/reservations/<int:reservation_id>/return/', mark_returned, name='mark_returned'),
+    
+    # Blacklist Management URLs
+    path('faculty/blacklist/', manage_blacklist, name='manage_blacklist'),
+    path('faculty/blacklist/add/<int:student_id>/', blacklist_student, name='blacklist_student'),
+    path('faculty/blacklist/remove/<int:blacklist_id>/', remove_from_blacklist, name='remove_from_blacklist'),
     
     # Cart URLs
     path('cart/', views.view_cart, name='view_cart'),

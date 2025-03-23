@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Manage Student Blacklist{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h1 class="mb-4">Manage Student Blacklist</h1>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">Currently Blacklisted Students</h5>
+                </div>
+                <div class="card-body">
+                    {% if blacklisted_students %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Student</th>
+                                        <th>Blacklisted By</th>
+                                        <th>Date</th>
+                                        <th>Reason</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for blacklist in blacklisted_students %}
+                                    <tr>
+                                        <td>{{ blacklist.student.first_name }} {{ blacklist.student.last_name }}</td>
+                                        <td>{{ blacklist.blacklisted_by.first_name }} {{ blacklist.blacklisted_by.last_name }}</td>
+                                        <td>{{ blacklist.blacklisted_date|date:"M d, Y" }}</td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-info" data-toggle="tooltip" data-placement="top" title="{{ blacklist.reason }}">
+                                                View Reason
+                                            </button>
+                                        </td>
+                                        <td>
+                                            <a href="{% url 'remove_from_blacklist' blacklist.id %}" class="btn btn-sm btn-warning">
+                                                Remove
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No students are currently blacklisted.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Available Students</h5>
+                </div>
+                <div class="card-body">
+                    {% if students %}
+                        <div class="input-group mb-3">
+                            <input type="text" id="studentSearch" class="form-control" placeholder="Search for students...">
+                            <div class="input-group-append">
+                                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="studentTable">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for student in students %}
+                                    <tr class="student-row">
+                                        <td>{{ student.first_name }} {{ student.last_name }}</td>
+                                        <td>{{ student.email }}</td>
+                                        <td>
+                                            <a href="{% url 'blacklist_student' student.id %}" class="btn btn-sm btn-danger">
+                                                Blacklist
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No students available.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+$(document).ready(function(){
+    // Enable tooltips
+    $('[data-toggle="tooltip"]').tooltip();
+    
+    // Search functionality
+    $("#studentSearch").on("keyup", function() {
+        var value = $(this).val().toLowerCase();
+        $("#studentTable .student-row").filter(function() {
+            $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1);
+        });
+    });
+});
+</script>
+{% endblock %}
+{% endblock %}

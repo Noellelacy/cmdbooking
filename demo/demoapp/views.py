@@ -1,20 +1,45 @@
-from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.contrib import messages
-from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.views import LoginView
-from django.contrib.auth.models import User
-from django.urls import reverse_lazy, reverse
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
-from django.views import View
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.utils import timezone
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
+
+# Custom decorators and mixins for role-based access control
+def faculty_required(function):
+    """Decorator to ensure only faculty members can access a view"""
+    actual_decorator = user_passes_test(
+        lambda u: hasattr(u, 'userprofile') and u.userprofile.is_faculty()
+    )
+    return actual_decorator(function)
+
+def student_required(function):
+    """Decorator to ensure only students can access a view"""
+    actual_decorator = user_passes_test(
+        lambda u: hasattr(u, 'userprofile') and not u.userprofile.is_faculty()
+    )
+    return actual_decorator(function)
+
+class FacultyRequiredMixin(UserPassesTestMixin):
+    """Mixin to ensure only faculty members can access a class-based view"""
+    def test_func(self):
+        return hasattr(self.request.user, 'userprofile') and self.request.user.userprofile.is_faculty()
+
+class StudentRequiredMixin(UserPassesTestMixin):
+    """Mixin to ensure only students can access a class-based view"""
+    def test_func(self):
+        return hasattr(self.request.user, 'userprofile') and not self.request.user.userprofile.is_faculty()
+
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User
+from django.contrib.auth.views import LoginView
+from django.contrib import messages
+from django.urls import reverse, reverse_lazy
+from django.utils import timezone
+from django.views.generic import ListView
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.middleware.csrf import get_token
+from django.db import transaction
 from django.db.models import Q, Count
 from djreservation.views import ProductReservationView
-from .models import MultimediaEquipment, EquipmentUsage, MaintenanceRecord, UserProfile, EquipmentCategory, CartItem, create_user_profile, save_user_profile
+from .models import MultimediaEquipment, EquipmentUsage, MaintenanceRecord, UserProfile, EquipmentCategory, CartItem, BlacklistedStudent, create_user_profile, save_user_profile
 from .forms import SignUpForm, EquipmentCategoryForm, MultimediaEquipmentForm, MaintenanceRecordForm, ReservationApprovalForm, CategoryForm
 from django.views.decorators.http import require_http_methods
 from django.core.exceptions import ObjectDoesNotExist
@@ -35,6 +60,9 @@ from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.db.models.functions import ExtractHour, ExtractWeekDay
+from django.db.models import Avg, ExpressionWrapper, F, DurationField
+import json
+from django.db.models.functions import TruncDate
 
 import datetime
 
@@ -174,12 +202,9 @@ def faculty_logout_view(request):
     return redirect('faculty_login')
 
 @login_required
+@faculty_required
 def faculty_dashboard(request):
     """Dashboard view for faculty members."""
-    if not request.user.userprofile.is_faculty():
-        messages.error(request, 'Only faculty members can access this page.')
-        return redirect('faculty_login')
-
     # Get current date for comparisons
     current_date = timezone.now()
 
@@ -227,6 +252,7 @@ def home(request):
     return render(request, 'index.html')
 
 @login_required
+@student_required
 def my_reservations(request):
     """View student's equipment reservations."""
     # Check if user is faculty - if so, redirect them
@@ -248,6 +274,7 @@ def my_reservations(request):
     })
 
 @login_required
+@student_required
 def equipment_return(request, usage_id):
     usage = get_object_or_404(EquipmentUsage, id=usage_id, user=request.user)
     if request.method == 'POST':
@@ -257,12 +284,11 @@ def equipment_return(request, usage_id):
     return render(request, 'equipment_return.html', {'usage': usage})
 
 @login_required
+@student_required
 def dashboard(request):
     """Student dashboard view showing reserved equipment and other student info"""
-    # Check if user is a student
-    if request.user.userprofile.is_faculty():
-        messages.error(request, 'This dashboard is for students only. Faculty members should use the faculty dashboard.')
-        return redirect('faculty_dashboard')
+    # Check if user is blacklisted
+    is_blacklisted, blacklist_record = is_student_blacklisted(request.user)
     
     # Get all of the student's reservations
     all_reservations = EquipmentUsage.objects.filter(
@@ -288,14 +314,15 @@ def dashboard(request):
     recent_activity = all_reservations.order_by('-checkout_time')[:5]
     
     # Get category usage statistics
-    category_stats = all_reservations.values('equipment__category__name').annotate(
-        count=Count('id')
-    ).order_by('-count')
+    category_stats = list(all_reservations.values('equipment__equipment_type').annotate(count=Count('id')))
+    
+    # Convert category_stats to a JSON-serializable format
+    for stat in category_stats:
+        if 'equipment__equipment_type' in stat and stat['equipment__equipment_type'] is None:
+            stat['equipment__equipment_type'] = 'Unknown'
     
     # Get equipment type usage statistics
-    equipment_type_stats = all_reservations.values('equipment__equipment_type').annotate(
-        count=Count('id')
-    ).order_by('-count')
+    equipment_type_stats = list(all_reservations.values('equipment__equipment_type').annotate(count=Count('id')))
     
     context = {
         'reservations': active_reservations,
@@ -308,9 +335,11 @@ def dashboard(request):
         'recent_activity': recent_activity,
         'category_stats': equipment_type_stats,
         'user_details': request.user,
+        'is_blacklisted': is_blacklisted,
+        'blacklist_record': blacklist_record,
     }
     
-    return render(request, 'dashboard.html', context)
+    return render(request, 'student/dashboard.html', context)
 
 @login_required
 def equipment_list_manage(request):
@@ -799,6 +828,19 @@ class StudentEquipmentListView(LoginRequiredMixin, ListView):
         context['is_faculty'] = self.request.user.userprofile.is_faculty()
         return context
 
+@login_required
+@student_required
+def browse_equipment(request):
+    """View for students to browse available equipment for reservations"""
+    categories = EquipmentCategory.objects.all()
+    equipment_list = MultimediaEquipment.objects.filter(is_available=True).order_by('name')
+    
+    context = {
+        'categories': categories,
+        'equipment_list': equipment_list,
+    }
+    return render(request, 'student/equipment_list.html', context)
+
 def refresh_csrf(request):
     """
     View to refresh CSRF token - returns a new token to be used in forms.
@@ -806,61 +848,25 @@ def refresh_csrf(request):
     """
     return HttpResponse(get_token(request))
 
-@login_required
-def add_to_cart(request, equipment_id):
-    """Add an equipment item to the user's reservation cart."""
-    # Check if user is faculty - if so, redirect them
-    if hasattr(request.user, 'userprofile') and request.user.userprofile.is_faculty():
-        messages.error(request, 'Faculty members cannot make equipment reservations.')
-        return redirect('faculty_dashboard')
+## Blacklist utility function
+def is_student_blacklisted(user):
+    """Check if a student is blacklisted and return the blacklist record if they are.
     
-    if request.method == 'POST':
-        equipment = get_object_or_404(MultimediaEquipment, pk=equipment_id)
+    Args:
+        user: The user to check
         
-        # Get requested quantity from form (default to 1 if not provided)
-        try:
-            quantity = int(request.POST.get('quantity', 1))
-        except ValueError:
-            quantity = 1
-            
-        # Ensure requested quantity is at least 1
-        quantity = max(1, quantity)
-        
-        # Check if equipment is available and has enough quantity
-        if equipment.available_quantity <= 0:
-            messages.error(request, f'{equipment.name} is out of stock.')
-            return redirect('equipment_list')
-            
-        # Ensure the requested quantity doesn't exceed available quantity
-        if quantity > equipment.available_quantity:
-            messages.warning(request, f'Only {equipment.available_quantity} units of {equipment.name} are available. Adjusting quantity.')
-            quantity = equipment.available_quantity
-        
-        # Check if user already has this equipment in cart
-        if CartItem.objects.filter(user=request.user, equipment=equipment).exists():
-            messages.warning(request, f'{equipment.name} is already in your cart. Please update quantity in the cart view instead of adding it again.')
-            return redirect('view_cart')
-        
-        # Add the item to the cart
-        cart_item = CartItem.objects.create(
-            user=request.user,
-            equipment=equipment,
-            quantity=quantity
-        )
-        
-        messages.success(request, f'Added {quantity} {equipment.name} to your reservation cart.')
-        return redirect('view_cart')
-    
-    return redirect('equipment_list')
+    Returns:
+        tuple: (is_blacklisted, blacklist_record)
+            - is_blacklisted (bool): True if the user is blacklisted
+            - blacklist_record (BlacklistedStudent): The blacklist record if found, None otherwise
+    """
+    blacklist_record = BlacklistedStudent.objects.filter(student=user, is_active=True).first()
+    return (blacklist_record is not None, blacklist_record)
 
 @login_required
+@student_required
 def view_cart(request):
     """View the current user's reservation cart."""
-    # Check if user is faculty - if so, redirect them
-    if hasattr(request.user, 'userprofile') and request.user.userprofile.is_faculty():
-        messages.error(request, 'Faculty members cannot make equipment reservations.')
-        return redirect('faculty_dashboard')
-    
     cart_items = CartItem.objects.filter(user=request.user).select_related('equipment')
     
     context = {
@@ -870,22 +876,41 @@ def view_cart(request):
     return render(request, 'student/cart.html', context)
 
 @login_required
+@student_required
 def remove_from_cart(request, item_id):
     """Remove an item from the user's reservation cart."""
-    # Check if user is faculty - if so, redirect them
-    if hasattr(request.user, 'userprofile') and request.user.userprofile.is_faculty():
-        messages.error(request, 'Faculty members cannot make equipment reservations.')
-        return redirect('faculty_dashboard')
-    
-    if request.method == 'POST':
-        cart_item = get_object_or_404(CartItem, pk=item_id, user=request.user)
-        equipment_name = cart_item.equipment.name
+    try:
+        cart_item = CartItem.objects.get(id=item_id, user=request.user)
         cart_item.delete()
-        messages.success(request, f'{equipment_name} removed from your reservation cart.')
+        messages.success(request, f'{cart_item.equipment.name} removed from your cart.')
+    except CartItem.DoesNotExist:
+        messages.error(request, 'Item not found in your cart.')
     
     return redirect('view_cart')
 
 @login_required
+@student_required
+def add_to_cart(request, equipment_id):
+    """Add an equipment item to the user's reservation cart."""
+    # Check if student is blacklisted
+    is_blacklisted, blacklist_record = is_student_blacklisted(request.user)
+    if is_blacklisted:
+        messages.error(request, f'You cannot make reservations because you are blacklisted. Reason: {blacklist_record.reason}')
+        return redirect('browse_equipment')
+        
+    equipment = get_object_or_404(MultimediaEquipment, id=equipment_id, is_available=True)
+    
+    # Check if already in cart
+    if CartItem.objects.filter(user=request.user, equipment=equipment).exists():
+        messages.info(request, f'{equipment.name} is already in your cart.')
+    else:
+        CartItem.objects.create(user=request.user, equipment=equipment)
+        messages.success(request, f'{equipment.name} added to your cart.')
+    
+    return redirect('view_cart')
+
+@login_required
+@student_required
 def update_cart_item(request, item_id):
     """Update reservation details for a cart item."""
     if request.method == 'POST':
@@ -909,31 +934,41 @@ def update_cart_item(request, item_id):
             end_time_str = request.POST.get('end_time')
             
             if start_time_str and end_time_str:
-                # Parse datetime strings
-                try:
+                # Handle both datetime objects and strings
+                if isinstance(start_time_str, datetime.datetime) and isinstance(end_time_str, datetime.datetime):
+                    start_time = start_time_str
+                    end_time = end_time_str
+                else:
+                    # Ensure values are strings before parsing
+                    if not isinstance(start_time_str, str) or not isinstance(end_time_str, str):
+                        messages.error(request, 'Invalid date format. Please try again.')
+                        return redirect('view_cart')
+                        
                     start_time = datetime.datetime.fromisoformat(start_time_str)
                     end_time = datetime.datetime.fromisoformat(end_time_str)
-                    
-                    # Calculate time difference in hours
-                    time_diff = (end_time - start_time).total_seconds() / 3600
-                    
-                    # Check if reservation exceeds 24 hours
-                    if time_diff > 24:
-                        messages.error(request, f'Reservation duration cannot exceed 24 hours. Your requested duration: {time_diff:.1f} hours.')
-                        return redirect('view_cart')
-                    
-                    # Check if start time is in the past
-                    if start_time < datetime.datetime.now():
-                        messages.error(request, 'Start time cannot be in the past.')
-                        return redirect('view_cart')
-                    
-                    # Check if end time is before start time
-                    if end_time <= start_time:
-                        messages.error(request, 'End time must be after start time.')
-                        return redirect('view_cart')
-                    
-                except ValueError:
-                    messages.error(request, 'Invalid date/time format. Please use the datetime picker.')
+                
+                # Calculate time difference in hours
+                time_diff = (end_time - start_time).total_seconds() / 3600
+                
+                # Check if reservation exceeds 24 hours
+                if time_diff > 24:
+                    messages.error(request, f'Reservation for {cart_item.equipment.name} cannot exceed 24 hours. Your requested duration: {time_diff:.1f} hours.')
+                    return redirect('view_cart')
+                
+                # Check if start time is in the past - make timezone-aware comparison
+                now = datetime.datetime.now()
+                
+                if start_time.tzinfo is not None:
+                    # If start_time is timezone-aware, make now timezone-aware too
+                    now = timezone.make_aware(now)
+                
+                if start_time < now:
+                    messages.error(request, 'Start time cannot be in the past.')
+                    return redirect('view_cart')
+                
+                # Check if end time is before start time
+                if end_time <= start_time:
+                    messages.error(request, 'End time must be after start time.')
                     return redirect('view_cart')
             
             # Update cart item details
@@ -949,14 +984,25 @@ def update_cart_item(request, item_id):
     return redirect('view_cart')
 
 @login_required
+@student_required
 def checkout_cart(request):
     """Process the final reservation for all items in cart."""
-    cart_items = CartItem.objects.filter(user=request.user).select_related('equipment')
-    
-    if not cart_items.exists():
-        messages.error(request, 'Your reservation cart is empty.')
+    # Check if user is blacklisted before proceeding
+    is_blacklisted, blacklist_record = is_student_blacklisted(request.user)
+    if is_blacklisted:
+        messages.error(
+            request, 
+            f'You are currently blacklisted and cannot make reservations. Reason: {blacklist_record.reason}. '
+            f'Please contact a faculty member for assistance.'
+        )
         return redirect('view_cart')
     
+    cart_items = CartItem.objects.filter(user=request.user).select_related('equipment')
+    
+    if not cart_items:
+        messages.warning(request, 'Your cart is empty. Please add items before checking out.')
+        return redirect('browse_equipment')
+
     if request.method == 'POST':
         try:
             with transaction.atomic():
@@ -966,8 +1012,18 @@ def checkout_cart(request):
                     
                     # Check reservation time frame (cannot exceed 24 hours)
                     try:
-                        start_time = datetime.datetime.fromisoformat(item.start_time)
-                        end_time = datetime.datetime.fromisoformat(item.end_time)
+                        # Handle the case when item.start_time and item.end_time are already datetime objects
+                        if isinstance(item.start_time, datetime.datetime) and isinstance(item.end_time, datetime.datetime):
+                            start_time = item.start_time
+                            end_time = item.end_time
+                        else:
+                            # Ensure start_time and end_time are strings before parsing
+                            if not isinstance(item.start_time, str) or not isinstance(item.end_time, str):
+                                messages.error(request, 'Invalid date format. Please try again.')
+                                return redirect('view_cart')
+                                
+                            start_time = datetime.datetime.fromisoformat(item.start_time)
+                            end_time = datetime.datetime.fromisoformat(item.end_time)
                         
                         # Calculate time difference in hours
                         time_diff = (end_time - start_time).total_seconds() / 3600
@@ -976,8 +1032,14 @@ def checkout_cart(request):
                         if time_diff > 24:
                             raise ValueError(f'Reservation for {item.equipment.name} cannot exceed 24 hours. Your requested duration: {time_diff:.1f} hours.')
                         
-                        # Check if start time is in the past
-                        if start_time < datetime.datetime.now():
+                        # Check if start time is in the past - make timezone-aware comparison
+                        now = datetime.datetime.now()
+                        
+                        if start_time.tzinfo is not None:
+                            # If start_time is timezone-aware, make now timezone-aware too
+                            now = timezone.make_aware(now)
+                        
+                        if start_time < now:
                             raise ValueError(f'Start time for {item.equipment.name} cannot be in the past.')
                         
                         # Check if end time is before start time
@@ -986,7 +1048,7 @@ def checkout_cart(request):
                             
                     except ValueError as e:
                         if 'fromisoformat' in str(e):
-                            raise ValueError(f'Invalid date/time format for {item.equipment.name}. Please use the datetime picker.')
+                            raise ValueError(f'Invalid date format for {item.equipment.name}. Please use the datetime picker.')
                         else:
                             raise e
                     
@@ -1029,40 +1091,17 @@ def checkout_cart(request):
     return render(request, 'student/cart.html', context)
 
 @login_required
+@faculty_required
 def faculty_analytics(request):
     """Advanced analytics dashboard for faculty members."""
-    if not request.user.userprofile.is_faculty():
-        messages.error(request, 'Only faculty members can access this page.')
-        return redirect('faculty_login')
-
-    # Date range filters
-    start_date = request.GET.get('start_date')
-    end_date = request.GET.get('end_date')
+    # Current date for comparisons
+    current_date = timezone.now()
     
-    # Default to last 30 days if no date range is specified
-    if not start_date:
-        start_date = (timezone.now() - timedelta(days=30)).date()
-    else:
-        start_date = timezone.datetime.strptime(start_date, '%Y-%m-%d').date()
-    
-    if not end_date:
-        end_date = timezone.now().date()
-    else:
-        end_date = timezone.datetime.strptime(end_date, '%Y-%m-%d').date()
-    
-    # Convert dates to datetime for query
-    start_datetime = timezone.datetime.combine(start_date, timezone.datetime.min.time())
-    end_datetime = timezone.datetime.combine(end_date, timezone.datetime.max.time())
-    
-    # Base querysets
-    equipments = MultimediaEquipment.objects.all()
-    usages = EquipmentUsage.objects.filter(
-        checkout_time__gte=start_datetime,
-        checkout_time__lte=end_datetime
-    ).select_related('equipment', 'user', 'user__userprofile')
+    # Get all equipment usages
+    usages = EquipmentUsage.objects.all()
     
     # 1. Equipment Utilization Rate
-    total_equipment_count = equipments.count()
+    total_equipment_count = MultimediaEquipment.objects.count()
     used_equipment_ids = usages.values_list('equipment_id', flat=True).distinct()
     utilization_rate = (len(set(used_equipment_ids)) / total_equipment_count * 100) if total_equipment_count > 0 else 0
     
@@ -1105,7 +1144,7 @@ def faculty_analytics(request):
         count=Count('id')).values_list('equipment', 'count'))
     
     # Then identify equipment with zero or low usage
-    all_equipment = equipments.values('id', 'name', 'equipment_type')
+    all_equipment = MultimediaEquipment.objects.values('id', 'name', 'equipment_type')
     for item in all_equipment:
         item['usage_count'] = equipment_usage_counts.get(item['id'], 0)
     
@@ -1152,9 +1191,379 @@ def faculty_analytics(request):
         'avg_duration': round(avg_duration, 1),
         'max_duration': round(max_duration, 1),
         'overbooked_equipment': overbooked_equipment,
+        'active_tab': 'analytics'
+    }
+    
+    return render(request, 'faculty/analytics.html', context)
+
+@login_required
+@faculty_required
+def equipment_detail_analytics(request, equipment_id):
+    """Detailed analytics for a specific equipment item."""
+    equipment = get_object_or_404(MultimediaEquipment, id=equipment_id)
+    
+    # Date range filters
+    start_date_str = request.GET.get('start_date')
+    end_date_str = request.GET.get('end_date')
+    
+    # Handle daterangepicker format if coming from the UI
+    daterange = request.GET.get('daterange')
+    if daterange:
+        try:
+            start_date_str, end_date_str = daterange.split(' - ')
+            start_date = timezone.datetime.strptime(start_date_str, '%m/%d/%Y').date()
+            end_date = timezone.datetime.strptime(end_date_str, '%m/%d/%Y').date()
+        except (ValueError, IndexError):
+            # Default to last 30 days if format is incorrect
+            start_date = (timezone.now() - timedelta(days=30)).date()
+            end_date = timezone.now().date()
+    else:
+        # Default to last 30 days if no date range is specified
+        if not start_date_str:
+            start_date = (timezone.now() - timedelta(days=30)).date()
+        else:
+            try:
+                start_date = timezone.datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                start_date = (timezone.now() - timedelta(days=30)).date()
+        
+        if not end_date_str:
+            end_date = timezone.now().date()
+        else:
+            try:
+                end_date = timezone.datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                end_date = timezone.now().date()
+    
+    # Convert dates to datetime for query
+    start_datetime = timezone.datetime.combine(start_date, timezone.datetime.min.time())
+    end_datetime = timezone.datetime.combine(end_date, timezone.datetime.max.time())
+    
+    # Get all usage records for this equipment
+    usages = EquipmentUsage.objects.filter(
+        equipment=equipment,
+        checkout_time__gte=start_datetime,
+        checkout_time__lte=end_datetime
+    ).select_related('user', 'user__userprofile')
+    
+    # Key statistics
+    total_reservations = usages.count()
+    unique_users = usages.values('user').distinct().count()
+    
+    # Calculate utilization rate (% of days the equipment was used)
+    date_range = (end_date - start_date).days + 1
+    days_used = usages.dates('checkout_time', 'day').count()
+    utilization_rate = (days_used / date_range * 100) if date_range > 0 else 0
+    
+    # Calculate average duration
+    durations = []
+    for usage in usages:
+        if usage.actual_return_time:
+            duration = (usage.actual_return_time - usage.checkout_time).total_seconds() / 3600  # hours
+        elif usage.expected_return_time:
+            duration = (usage.expected_return_time - usage.checkout_time).total_seconds() / 3600  # hours
+        else:
+            duration = 0
+        durations.append(duration)
+    
+    avg_duration = sum(durations) / len(durations) if durations else 0
+    
+    # Timeline data
+    timeline_items = []
+    
+    # Add reservations to timeline
+    for usage in usages:
+        end_time = usage.actual_return_time or usage.expected_return_time or usage.checkout_time
+        timeline_items.append({
+            'id': f'reservation-{usage.id}',
+            'content': f'Reserved by {usage.user.username}',
+            'start': usage.checkout_time.isoformat(),
+            'end': end_time.isoformat(),
+            'group': 1,
+            'className': 'reservation',
+            'description': f'Purpose: {usage.purpose or "Not specified"}'
+        })
+    
+    # Add maintenance records
+    maintenance_records = MaintenanceRecord.objects.filter(
+        equipment=equipment,
+        maintenance_date__gte=start_datetime,
+        maintenance_date__lte=end_datetime
+    )
+    
+    for record in maintenance_records:
+        end_time = record.maintenance_date + timedelta(hours=2)  # Assume 2 hours for maintenance
+        timeline_items.append({
+            'id': f'maintenance-{record.id}',
+            'content': f'Maintenance: {record.maintenance_type}',
+            'start': record.maintenance_date.isoformat(),
+            'end': end_time.isoformat(),
+            'group': 2,
+            'className': 'maintenance',
+            'description': record.notes
+        })
+    
+    # Daily usage data
+    daily_usage = usages.annotate(
+        day=TruncDate('checkout_time')
+    ).values('day').annotate(
+        count=Count('id')
+    ).order_by('day')
+    
+    daily_labels = []
+    daily_data = []
+    
+    # Fill in days with no usage
+    current_date = start_date
+    while current_date <= end_date:
+        daily_labels.append(current_date.strftime('%Y-%m-%d'))
+        daily_data.append(0)
+        current_date += timedelta(days=1)
+    
+    # Update with actual usage
+    for usage in daily_usage:
+        day_index = (usage['day'].date() - start_date).days
+        if 0 <= day_index < len(daily_data):
+            daily_data[day_index] = usage['count']
+    
+    daily_usage_data = {
+        'labels': daily_labels,
+        'datasets': [{
+            'label': 'Reservations',
+            'data': daily_data,
+            'backgroundColor': 'rgba(54, 162, 235, 0.2)',
+            'borderColor': 'rgba(54, 162, 235, 1)',
+            'borderWidth': 1,
+            'tension': 0.1
+        }]
+    }
+    
+    # Hourly usage data
+    hourly_usage = usages.annotate(
+        hour=ExtractHour('checkout_time')
+    ).values('hour').annotate(
+        count=Count('id')
+    ).order_by('hour')
+    
+    hours_data = {hour: 0 for hour in range(24)}
+    for item in hourly_usage:
+        hours_data[item['hour']] = item['count']
+    
+    hourly_labels = [f'{hour}:00' for hour in range(24)]
+    hourly_data = [hours_data[hour] for hour in range(24)]
+    
+    hourly_usage_data = {
+        'labels': hourly_labels,
+        'datasets': [{
+            'label': 'Reservations',
+            'data': hourly_data,
+            'backgroundColor': 'rgba(255, 99, 132, 0.2)',
+            'borderColor': 'rgba(255, 99, 132, 1)',
+            'borderWidth': 1
+        }]
+    }
+    
+    # Department usage data
+    department_usage = usages.values(
+        'user__userprofile__department'
+    ).annotate(
+        count=Count('id')
+    ).order_by('-count')
+    
+    department_labels = [item['user__userprofile__department'] or 'Unknown' for item in department_usage]
+    department_data = [item['count'] for item in department_usage]
+    
+    department_usage_data = {
+        'labels': department_labels,
+        'datasets': [{
+            'label': 'Reservations by Department',
+            'data': department_data,
+            'backgroundColor': [
+                'rgba(255, 99, 132, 0.6)',
+                'rgba(54, 162, 235, 0.6)',
+                'rgba(255, 206, 86, 0.6)',
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(153, 102, 255, 0.6)',
+                'rgba(255, 159, 64, 0.6)',
+                'rgba(199, 199, 199, 0.6)',
+                'rgba(83, 102, 255, 0.6)',
+                'rgba(40, 159, 64, 0.6)',
+                'rgba(210, 199, 199, 0.6)',
+            ],
+            'borderColor': [
+                'rgba(255, 99, 132, 1)',
+                'rgba(54, 162, 235, 1)',
+                'rgba(255, 206, 86, 1)',
+                'rgba(75, 192, 192, 1)',
+                'rgba(153, 102, 255, 1)',
+                'rgba(255, 159, 64, 1)',
+                'rgba(199, 199, 199, 1)',
+                'rgba(83, 102, 255, 1)',
+                'rgba(40, 159, 64, 1)',
+                'rgba(210, 199, 199, 1)',
+            ],
+            'borderWidth': 1
+        }]
+    }
+    
+    # Rejection data
+    rejection_reasons = [
+        'Not Available',
+        'Maintenance',
+        'Reservations Full',
+        'Not Authorized',
+        'Other'
+    ]
+    
+    # Simulated rejection data (replace with actual data if available)
+    rejected_usages = EquipmentUsage.objects.filter(
+        equipment=equipment,
+        status='rejected',
+        checkout_time__gte=start_datetime,
+        checkout_time__lte=end_datetime
+    )
+    
+    # Count rejections by reason (simplified)
+    rejection_counts = {reason: 0 for reason in rejection_reasons}
+    for usage in rejected_usages:
+        reason = usage.rejection_reason if hasattr(usage, 'rejection_reason') and usage.rejection_reason else 'Other'
+        if reason in rejection_counts:
+            rejection_counts[reason] += 1
+        else:
+            rejection_counts['Other'] += 1
+    
+    rejection_data = {
+        'labels': rejection_reasons,
+        'datasets': [{
+            'label': 'Rejections by Reason',
+            'data': [rejection_counts[reason] for reason in rejection_reasons],
+            'backgroundColor': 'rgba(255, 99, 132, 0.2)',
+            'borderColor': 'rgba(255, 99, 132, 1)',
+            'borderWidth': 1
+        }]
+    }
+    
+    # User statistics
+    user_stats = usages.values(
+        'user__username', 'user__userprofile__department'
+    ).annotate(
+        total_reservations=Count('id'),
+        avg_duration=Avg(
+            ExpressionWrapper(
+                F('actual_return_time') - F('checkout_time'),
+                output_field=DurationField()
+            )
+        ),
+        last_used=Max('checkout_time')
+    ).order_by('-total_reservations')
+    
+    # Convert timeline data to JSON
+    timeline_data_json = json.dumps(timeline_items)
+    daily_usage_data_json = json.dumps(daily_usage_data)
+    hourly_usage_data_json = json.dumps(hourly_usage_data)
+    department_usage_data_json = json.dumps(department_usage_data)
+    rejection_data_json = json.dumps(rejection_data)
+    
+    context = {
+        'equipment': equipment,
+        'total_reservations': total_reservations,
+        'unique_users': unique_users,
+        'utilization_rate': round(utilization_rate, 1),
+        'avg_duration': avg_duration,
+        'timeline_data': timeline_data_json,
+        'daily_usage_data': daily_usage_data_json,
+        'hourly_usage_data': hourly_usage_data_json,
+        'department_usage_data': department_usage_data_json,
+        'rejection_data': rejection_data_json,
+        'user_stats': user_stats,
         'start_date': start_date,
         'end_date': end_date,
         'active_tab': 'analytics'
     }
     
-    return render(request, 'faculty/analytics.html', context)
+    return render(request, 'faculty/equipment_detail_analytics.html', context)
+
+@login_required
+@faculty_required
+def equipment_analytics(request):
+    """View for faculty to see equipment analytics."""
+    return render(request, 'faculty/equipment_analytics.html')
+
+@login_required
+@faculty_required
+def manage_blacklist(request):
+    """View to manage the blacklist of students."""
+    blacklisted_students = BlacklistedStudent.objects.select_related('student', 'blacklisted_by').all()
+    
+    # Get all students (excluding faculty)
+    students = User.objects.filter(userprofile__user_type='student')
+    
+    # Exclude already blacklisted students
+    blacklisted_student_ids = BlacklistedStudent.objects.values_list('student_id', flat=True)
+    students = students.exclude(id__in=blacklisted_student_ids)
+    
+    return render(request, 'faculty/blacklist/manage_blacklist.html', {
+        'blacklisted_students': blacklisted_students,
+        'students': students
+    })
+
+@login_required
+@faculty_required
+def blacklist_student(request, student_id):
+    """View to blacklist a student."""
+    if request.method == 'POST':
+        reason = request.POST.get('reason')
+        
+        try:
+            student = User.objects.get(id=student_id)
+            if not hasattr(student, 'userprofile') or student.userprofile.is_faculty():
+                messages.error(request, 'Selected user is not a student.')
+                return redirect('manage_blacklist')
+            
+            # Check if student is already blacklisted
+            if BlacklistedStudent.objects.filter(student=student).exists():
+                messages.error(request, 'This student is already blacklisted.')
+                return redirect('manage_blacklist')
+            
+            # Create blacklist record
+            BlacklistedStudent.objects.create(
+                student=student,
+                reason=reason,
+                blacklisted_by=request.user
+            )
+            messages.success(request, f'Student {student.username} has been blacklisted.')
+            return redirect('manage_blacklist')
+        except User.DoesNotExist:
+            messages.error(request, 'Student not found.')
+            return redirect('manage_blacklist')
+    
+    # Get student details
+    try:
+        student = User.objects.get(id=student_id)
+        if not hasattr(student, 'userprofile') or student.userprofile.is_faculty():
+            messages.error(request, 'Selected user is not a student.')
+            return redirect('manage_blacklist')
+    except User.DoesNotExist:
+        messages.error(request, 'Student not found.')
+        return redirect('manage_blacklist')
+    
+    return render(request, 'faculty/blacklist/blacklist_student.html', {'student': student})
+
+@login_required
+@faculty_required
+def remove_from_blacklist(request, blacklist_id):
+    """View to remove a student from the blacklist."""
+    try:
+        blacklist_record = BlacklistedStudent.objects.get(id=blacklist_id)
+    except BlacklistedStudent.DoesNotExist:
+        messages.error(request, 'Blacklist record not found.')
+        return redirect('manage_blacklist')
+    
+    if request.method == 'POST':
+        # Delete the blacklist record
+        student_name = blacklist_record.student.username
+        blacklist_record.delete()
+        messages.success(request, f'Student {student_name} has been removed from the blacklist.')
+        return redirect('manage_blacklist')
+    
+    return render(request, 'faculty/blacklist/remove_from_blacklist.html', {'blacklist': blacklist_record})

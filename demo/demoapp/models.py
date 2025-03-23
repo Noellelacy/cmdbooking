@@ -163,6 +163,25 @@ class CartItem(models.Model):
             return delta.total_seconds() / 3600
         return 0
 
+class BlacklistedStudent(models.Model):
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='blacklist_records')
+    blacklisted_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='blacklisted_students')
+    reason = models.TextField()
+    blacklisted_date = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+    removed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='removed_blacklists')
+    removed_date = models.DateTimeField(null=True, blank=True)
+    removal_notes = models.TextField(blank=True)
+    
+    def __str__(self):
+        status = "Active" if self.is_active else "Removed"
+        return f"{self.student.username} - {status} - {self.blacklisted_date.strftime('%Y-%m-%d')}"
+    
+    class Meta:
+        verbose_name = _('Blacklisted Student')
+        verbose_name_plural = _('Blacklisted Students')
+        ordering = ['-blacklisted_date']
+
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     """Create a UserProfile for every new user"""

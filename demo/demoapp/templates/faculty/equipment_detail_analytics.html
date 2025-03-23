@@ -315,130 +315,196 @@
 <script src="https://cdn.jsdelivr.net/npm/vis-timeline@7.7.0/dist/vis-timeline-graph2d.min.js"></script>
 
 <script>
-    // Initialize daterangepicker
-    $('input[name="daterange"]').daterangepicker({
-        startDate: moment('{{ start_date|date:"Y-m-d" }}'),
-        endDate: moment('{{ end_date|date:"Y-m-d" }}'),
-        locale: {
-            format: 'MM/DD/YYYY'
-        }
-    });
+    /* eslint-disable */
+    $(document).ready(function() {
+        // Initialize daterangepicker
+        $('input[name="daterange"]').daterangepicker({
+            startDate: moment('{{ start_date|date:"Y-m-d" }}'),
+            endDate: moment('{{ end_date|date:"Y-m-d" }}'),
+            locale: {
+                format: 'MM/DD/YYYY'
+            }
+        });
 
-    // Timeline setup
-    const timelineContainer = document.getElementById('timeline');
-    const items = new vis.DataSet({{ timeline_data|safe }});
-    
-    const options = {
-        height: '400px',
-        min: moment('{{ start_date|date:"Y-m-d" }}').toDate(),
-        max: moment('{{ end_date|date:"Y-m-d" }}').toDate(),
-        stack: true,
-        showMajorLabels: true,
-        showMinorLabels: true,
-        zoomMin: 1000 * 60 * 60 * 24,  // One day
-        zoomMax: 1000 * 60 * 60 * 24 * 31 * 3,  // Three months
-        template: function(item) {
-            return `
-                <div class="timeline-item">
-                    <div class="item-title">${item.content}</div>
-                    ${item.description ? `<div class="item-description">${item.description}</div>` : ''}
-                </div>
-            `;
-        }
-    };
-    
-    const timeline = new vis.Timeline(timelineContainer, items, options);
-    
-    // Timeline controls
-    document.getElementById('zoomIn').addEventListener('click', function() {
-        timeline.zoomIn(0.5);
-    });
-    
-    document.getElementById('zoomOut').addEventListener('click', function() {
-        timeline.zoomOut(0.5);
-    });
-    
-    document.getElementById('moveLeft').addEventListener('click', function() {
-        const currentWindow = timeline.getWindow();
-        const interval = currentWindow.end - currentWindow.start;
-        timeline.setWindow(
-            currentWindow.start - interval * 0.3,
-            currentWindow.end - interval * 0.3
-        );
-    });
-    
-    document.getElementById('moveRight').addEventListener('click', function() {
-        const currentWindow = timeline.getWindow();
-        const interval = currentWindow.end - currentWindow.start;
-        timeline.setWindow(
-            currentWindow.start + interval * 0.3,
-            currentWindow.end + interval * 0.3
-        );
-    });
-    
-    document.getElementById('fitAll').addEventListener('click', function() {
-        timeline.fit();
-    });
+        // Timeline setup
+        const timelineContainer = document.getElementById('timeline');
+        const items = new vis.DataSet({{ timeline_data|safe }});
+        const groups = new vis.DataSet([
+            {id: 1, content: 'Reservations'},
+            {id: 2, content: 'Maintenance'}
+        ]);
+        
+        const options = {
+            height: '400px',
+            min: moment('{{ start_date|date:"Y-m-d" }}').toDate(),
+            max: moment('{{ end_date|date:"Y-m-d" }}').toDate(),
+            stack: true,
+            showMajorLabels: true,
+            showMinorLabels: true,
+            zoomMin: 1000 * 60 * 60 * 24,  // One day
+            zoomMax: 1000 * 60 * 60 * 24 * 31 * 3,  // Three months
+            template: function(item) {
+                return `
+                    <div class="timeline-item">
+                        <div class="item-title">${item.content}</div>
+                        ${item.description ? `<div class="item-description">${item.description}</div>` : ''}
+                    </div>
+                `;
+            }
+        };
+        
+        const timeline = new vis.Timeline(timelineContainer, items, groups, options);
+        
+        // Timeline controls
+        document.getElementById('zoomIn').addEventListener('click', function() {
+            timeline.zoomIn(0.5);
+        });
+        
+        document.getElementById('zoomOut').addEventListener('click', function() {
+            timeline.zoomOut(0.5);
+        });
+        
+        document.getElementById('moveLeft').addEventListener('click', function() {
+            const currentWindow = timeline.getWindow();
+            const interval = currentWindow.end - currentWindow.start;
+            timeline.setWindow(
+                currentWindow.start - interval * 0.3,
+                currentWindow.end - interval * 0.3
+            );
+        });
+        
+        document.getElementById('moveRight').addEventListener('click', function() {
+            const currentWindow = timeline.getWindow();
+            const interval = currentWindow.end - currentWindow.start;
+            timeline.setWindow(
+                currentWindow.start + interval * 0.3,
+                currentWindow.end + interval * 0.3
+            );
+        });
+        
+        document.getElementById('fitAll').addEventListener('click', function() {
+            timeline.fit();
+        });
 
-    // Initialize charts
-    const dailyUsageCtx = document.getElementById('dailyUsageChart').getContext('2d');
-    new Chart(dailyUsageCtx, {
-        type: 'line',
-        data: {{ daily_usage_data|safe }},
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'top',
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'Number of Reservations'
+        // Initialize charts
+        const dailyUsageCtx = document.getElementById('dailyUsageChart').getContext('2d');
+        const dailyUsageChart = new Chart(dailyUsageCtx, {
+            type: 'line',
+            data: {{ daily_usage_data|safe }},
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top'
                     }
                 },
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Date'
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Reservations'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
                     }
                 }
             }
-        }
-    });
+        });
 
-    const hourlyUsageCtx = document.getElementById('hourlyUsageChart').getContext('2d');
-    new Chart(hourlyUsageCtx, {
-        type: 'bar',
-        data: {{ hourly_usage_data|safe }},
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'top',
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'Number of Reservations'
+        const hourlyUsageCtx = document.getElementById('hourlyUsageChart').getContext('2d');
+        const hourlyUsageChart = new Chart(hourlyUsageCtx, {
+            type: 'bar',
+            data: {{ hourly_usage_data|safe }},
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top'
                     }
                 },
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Hour of Day'
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Reservations'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Hour of Day'
+                        }
                     }
                 }
             }
-        }
+        });
+
+        // Department Usage Chart
+        const departmentUsageCtx = document.getElementById('departmentUsageChart').getContext('2d');
+        const departmentUsageChart = new Chart(departmentUsageCtx, {
+            type: 'pie',
+            data: {{ department_usage_data|safe }},
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw || 0;
+                                const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                const percentage = Math.round((value / total) * 100);
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Rejection Chart
+        const rejectionCtx = document.getElementById('rejectionChart').getContext('2d');
+        const rejectionChart = new Chart(rejectionCtx, {
+            type: 'bar',
+            data: {{ rejection_data|safe }},
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Count'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Rejection Reason'
+                        }
+                    }
+                }
+            }
+        });
     });
+    /* eslint-enable */
 </script>
 {% endblock %}

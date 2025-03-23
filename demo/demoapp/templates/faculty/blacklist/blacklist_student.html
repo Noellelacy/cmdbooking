@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Blacklist Student{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-danger text-white">
+                    <h3 class="mb-0">Blacklist Student: {{ student.first_name }} {{ student.last_name }}</h3>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="">
+                        {% csrf_token %}
+                        
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i> 
+                            <strong>Warning:</strong> Blacklisting this student will prevent them from making any equipment reservations until they are removed from the blacklist.
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="student_name">Student</label>
+                            <input type="text" class="form-control" id="student_name" 
+                                   value="{{ student.first_name }} {{ student.last_name }} ({{ student.email }})" readonly>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="reason">Reason for Blacklisting <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="reason" name="reason" rows="4" required></textarea>
+                            <small class="form-text text-muted">
+                                Please provide a detailed reason why this student is being blacklisted.
+                            </small>
+                        </div>
+                        
+                        <div class="form-group text-center mt-4">
+                            <a href="{% url 'manage_blacklist' %}" class="btn btn-secondary mr-2">
+                                <i class="fas fa-arrow-left"></i> Cancel
+                            </a>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-ban"></i> Blacklist Student
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

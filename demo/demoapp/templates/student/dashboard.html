@@ -1,0 +1,240 @@
+{% extends 'base.html' %}
+
+{% block css %}
+<style>
+    .dashboard-card {
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+    .dashboard-card:hover {
+        transform: translateY(-5px);
+    }
+    .stat-card {
+        background: white;
+        padding: 1.5rem;
+        text-align: center;
+        height: 100%;
+    }
+    .stat-number {
+        font-size: 2rem;
+        font-weight: 600;
+        color: #0d6efd;
+    }
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+    }
+    .activity-item {
+        padding: 1rem;
+        border-bottom: 1px solid #eee;
+    }
+    .status-badge {
+        padding: 0.4rem 0.6rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+    .chart-container {
+        height: 250px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- User Welcome Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-4">Student Dashboard</h2>
+            
+            {% if is_blacklisted %}
+            <div class="alert alert-danger" role="alert">
+                <h5 class="alert-heading">Account Restricted</h5>
+                <p>Your account has been blacklisted and you cannot make new reservations at this time.</p>
+                <hr>
+                <p class="mb-0">Reason: {{ blacklist_record.reason }}</p>
+                <p class="mb-0">Until: {{ blacklist_record.end_date }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Stats Cards Row -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card dashboard-card h-100">
+                <div class="stat-card">
+                    <div class="stat-number">{{ total_bookings }}</div>
+                    <div class="stat-label">Total Bookings</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card dashboard-card h-100">
+                <div class="stat-card">
+                    <div class="stat-number">{{ active_bookings_count }}</div>
+                    <div class="stat-label">Active Bookings</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card dashboard-card h-100">
+                <div class="stat-card">
+                    <div class="stat-number">{{ past_bookings_count }}</div>
+                    <div class="stat-label">Past Bookings</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card dashboard-card h-100">
+                <div class="stat-card">
+                    <div class="stat-number">{{ pending_count }}</div>
+                    <div class="stat-label">Pending Approvals</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Reservations Row -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card dashboard-card">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0">Current Reservations</h5>
+                </div>
+                <div class="card-body">
+                    {% if reservations %}
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Equipment</th>
+                                    <th>Status</th>
+                                    <th>Reserved From</th>
+                                    <th>Reserved Until</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for reservation in reservations %}
+                                <tr>
+                                    <td>{{ reservation.equipment.name }}</td>
+                                    <td>
+                                        {% if reservation.status == 'pending' %}
+                                        <span class="badge bg-warning status-badge">Pending</span>
+                                        {% elif reservation.status == 'approved' %}
+                                        <span class="badge bg-success status-badge">Approved</span>
+                                        {% elif reservation.status == 'checked_out' %}
+                                        <span class="badge bg-primary status-badge">Checked Out</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ reservation.checkout_time }}</td>
+                                    <td>{{ reservation.expected_return_time }}</td>
+                                    <td>
+                                        {% if reservation.status == 'checked_out' %}
+                                        <a href="{% url 'equipment_return' reservation.id %}" class="btn btn-sm btn-outline-primary">Return</a>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">You don't have any active reservations.</p>
+                    <a href="{% url 'equipment_list' %}" class="btn btn-primary mt-3">Browse Equipment</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Recent Activity -->
+        <div class="col-md-6 mb-4">
+            <div class="card dashboard-card h-100">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0">Recent Activity</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_activity %}
+                    <div class="activity-list">
+                        {% for activity in recent_activity %}
+                        <div class="activity-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1">{{ activity.equipment.name }}</h6>
+                                    <p class="text-muted mb-0 small">{{ activity.checkout_time }}</p>
+                                </div>
+                                <span class="badge {% if activity.status == 'returned' %}bg-secondary{% elif activity.status == 'pending' %}bg-warning{% elif activity.status == 'approved' %}bg-success{% elif activity.status == 'checked_out' %}bg-primary{% elif activity.status == 'rejected' %}bg-danger{% endif %} status-badge">
+                                    {{ activity.status|title }}
+                                </span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">No recent activity found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Equipment Usage by Type -->
+        <div class="col-md-6 mb-4">
+            <div class="card dashboard-card h-100">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0">Equipment Usage by Type</h5>
+                </div>
+                <div class="card-body">
+                    {% if category_stats %}
+                    <div class="chart-container">
+                        <canvas id="equipmentTypeChart"></canvas>
+                    </div>
+                    <script>
+                        document.addEventListener('DOMContentLoaded', function() {
+                            const ctx = document.getElementById('equipmentTypeChart').getContext('2d');
+                            const equipmentTypeChart = new Chart(ctx, {
+                                type: 'doughnut',
+                                data: {
+                                    labels: [
+                                        {% for stat in category_stats %}
+                                        '{{ stat.equipment__equipment_type|default:"Unknown" }}',
+                                        {% endfor %}
+                                    ],
+                                    datasets: [{
+                                        label: 'Usage Count',
+                                        data: [
+                                            {% for stat in category_stats %}
+                                            {{ stat.count }},
+                                            {% endfor %}
+                                        ],
+                                        backgroundColor: [
+                                            '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b',
+                                            '#6f42c1', '#5a5c69', '#2ecc71', '#3498db', '#e67e22'
+                                        ]
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    plugins: {
+                                        legend: {
+                                            position: 'bottom'
+                                        }
+                                    }
+                                }
+                            });
+                        });
+                    </script>
+                    {% else %}
+                    <p class="text-muted mb-0">No usage statistics available.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

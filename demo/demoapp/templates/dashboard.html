@@ -63,6 +63,24 @@
             </div>
         </div>
     </div>
+    
+    {% if is_blacklisted %}
+    <!-- Blacklist Notification -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-danger" role="alert">
+                <h4 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Account Blacklisted</h4>
+                <p>Your account has been blacklisted, and you are unable to make equipment reservations at this time.</p>
+                <hr>
+                <p class="mb-0"><strong>Reason:</strong> {{ blacklist_record.reason }}</p>
+                <p class="mb-0"><strong>Blacklisted on:</strong> {{ blacklist_record.blacklisted_date|date:"F d, Y" }}</p>
+                <p class="mb-0"><strong>Blacklisted by:</strong> {{ blacklist_record.blacklisted_by.get_full_name }}</p>
+                <hr>
+                <p class="mb-0">Please contact a faculty member for assistance with resolving this issue.</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Statistics Cards -->
     <div class="row mb-4 g-3">

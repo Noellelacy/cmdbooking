@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Remove Student from Blacklist{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h3 class="mb-0">Remove from Blacklist: {{ blacklisted.student.first_name }} {{ blacklisted.student.last_name }}</h3>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="">
+                        {% csrf_token %}
+                        
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i> 
+                            <strong>Note:</strong> Removing this student from the blacklist will allow them to make equipment reservations again.
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="student_name">Student</label>
+                            <input type="text" class="form-control" id="student_name" 
+                                   value="{{ blacklisted.student.first_name }} {{ blacklisted.student.last_name }} ({{ blacklisted.student.email }})" readonly>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="original_reason">Original Blacklist Reason</label>
+                            <textarea class="form-control" id="original_reason" rows="3" readonly>{{ blacklisted.reason }}</textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="removal_notes">Notes for Removal <span class="text-muted">(Optional)</span></label>
+                            <textarea class="form-control" id="removal_notes" name="removal_notes" rows="4"></textarea>
+                            <small class="form-text text-muted">
+                                You may provide notes about why this student is being removed from the blacklist.
+                            </small>
+                        </div>
+                        
+                        <div class="form-group text-center mt-4">
+                            <a href="{% url 'manage_blacklist' %}" class="btn btn-secondary mr-2">
+                                <i class="fas fa-arrow-left"></i> Cancel
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-check"></i> Remove from Blacklist
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
