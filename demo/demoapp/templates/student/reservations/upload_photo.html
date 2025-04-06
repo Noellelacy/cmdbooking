@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Upload Equipment Photo{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0">Upload Equipment Photo</h3>
+                </div>
+                <div class="card-body">
+                    <div class="mb-4">
+                        <h5>Reservation Details</h5>
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <tr>
+                                    <th>Equipment</th>
+                                    <td>{{ reservation.equipment.name }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Reservation Date</th>
+                                    <td>{{ reservation.checkout_time|date:"F d, Y" }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Return Date</th>
+                                    <td>{{ reservation.expected_return_time|date:"F d, Y" }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Quantity</th>
+                                    <td>{{ reservation.quantity }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>Instructions:</strong> Please upload a clear photo of the equipment. This helps us verify the condition before checkout.
+                    </div>
+                    
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <div class="form-group mb-4">
+                            <label for="id_equipment_photo" class="form-label">Equipment Photo <span class="text-danger">*</span></label>
+                            <div class="custom-file">
+                                {{ form.equipment_photo }}
+                            </div>
+                            <small class="form-text text-muted">
+                                Upload a clear, well-lit photo of the equipment.
+                            </small>
+                            {% if form.equipment_photo.errors %}
+                                <div class="text-danger">
+                                    {{ form.equipment_photo.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            <label for="id_photo_notes" class="form-label">Notes about equipment condition</label>
+                            {{ form.photo_notes }}
+                            <small class="form-text text-muted">
+                                Please note any existing damage or issues with the equipment.
+                            </small>
+                            {% if form.photo_notes.errors %}
+                                <div class="text-danger">
+                                    {{ form.photo_notes.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-group text-center mt-4">
+                            <a href="{% url 'my_reservations' %}" class="btn btn-secondary mr-2">
+                                <i class="fas fa-arrow-left"></i> Back to Reservations
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-camera"></i> Submit Photo
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Photo preview script -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const photoInput = document.getElementById('id_equipment_photo');
+        const previewContainer = document.createElement('div');
+        previewContainer.classList.add('mt-3');
+        previewContainer.id = 'photo-preview-container';
+        photoInput.parentNode.after(previewContainer);
+
+        photoInput.addEventListener('change', function() {
+            previewContainer.innerHTML = '';
+            if (this.files && this.files[0]) {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const preview = document.createElement('img');
+                    preview.src = e.target.result;
+                    preview.classList.add('img-thumbnail', 'mb-2');
+                    preview.style.maxHeight = '300px';
+                    
+                    const previewTitle = document.createElement('p');
+                    previewTitle.textContent = 'Photo Preview:';
+                    previewTitle.classList.add('mb-2', 'font-weight-bold');
+                    
+                    previewContainer.appendChild(previewTitle);
+                    previewContainer.appendChild(preview);
+                }
+                
+                reader.readAsDataURL(this.files[0]);
+            }
+        });
+    });
+</script>
+{% endblock %}

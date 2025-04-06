@@ -75,15 +75,8 @@ class CategoryForm(forms.ModelForm):
         model = EquipmentCategory
         fields = ['name', 'description']
         widgets = {
-            'description': forms.Textarea(attrs={'rows': 3}),
-        }
-
-class EquipmentCategoryForm(forms.ModelForm):
-    class Meta:
-        model = EquipmentCategory
-        fields = ['name', 'description']
-        widgets = {
-            'description': forms.Textarea(attrs={'rows': 3}),
+            'name': forms.TextInput(attrs={'class': 'form-control', 'required': True}),
+            'description': forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
         }
 
 class MultimediaEquipmentForm(forms.ModelForm):
@@ -140,6 +133,27 @@ class ReservationApprovalForm(forms.ModelForm):
         if approved_by:
             instance.approved_by = approved_by
             instance.approved_at = timezone.now()
+        if commit:
+            instance.save()
+        return instance
+
+class EquipmentPhotoUploadForm(forms.ModelForm):
+    photo_notes = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 3, 'class': 'form-control', 'placeholder': 'Add any notes about the equipment condition'}),
+        required=False
+    )
+    
+    class Meta:
+        model = EquipmentUsage
+        fields = ['equipment_photo', 'photo_notes']
+        widgets = {
+            'equipment_photo': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
+        }
+        
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.status = 'photo_submitted'
+        instance.photo_uploaded_at = timezone.now()
         if commit:
             instance.save()
         return instance

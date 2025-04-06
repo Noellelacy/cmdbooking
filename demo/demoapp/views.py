@@ -1,6 +1,7 @@
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.utils import timezone
+from django.db.models import Count, Avg, F, Sum, Max, Min, ExpressionWrapper, DurationField
 
 # Custom decorators and mixins for role-based access control
 def faculty_required(function):
@@ -40,7 +41,7 @@ from django.db import transaction
 from django.db.models import Q, Count
 from djreservation.views import ProductReservationView
 from .models import MultimediaEquipment, EquipmentUsage, MaintenanceRecord, UserProfile, EquipmentCategory, CartItem, BlacklistedStudent, create_user_profile, save_user_profile
-from .forms import SignUpForm, EquipmentCategoryForm, MultimediaEquipmentForm, MaintenanceRecordForm, ReservationApprovalForm, CategoryForm
+from .forms import SignUpForm, MultimediaEquipmentForm, MaintenanceRecordForm, ReservationApprovalForm, CategoryForm, EquipmentPhotoUploadForm
 from django.views.decorators.http import require_http_methods
 from django.core.exceptions import ObjectDoesNotExist
 from django.template.context_processors import csrf
@@ -63,8 +64,24 @@ from django.db.models.functions import ExtractHour, ExtractWeekDay
 from django.db.models import Avg, ExpressionWrapper, F, DurationField
 import json
 from django.db.models.functions import TruncDate
+from django.core.serializers.json import DjangoJSONEncoder
 
 import datetime
+
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import HttpResponse, JsonResponse, Http404, HttpResponseRedirect
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
+from django.contrib import messages
+from django.urls import reverse
+from django.utils import timezone
+from django.views.generic import ListView
+from django.db.models import Q, Count, Sum, F, ExpressionWrapper, fields
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+from django.core.exceptions import PermissionDenied
 
 class CustomLoginView(LoginView):
     template_name = 'auth/login.html'
@@ -98,6 +115,10 @@ def login_view(request):
             pass
 
     next_url = request.GET.get('next', '')
+    context = {'next': next_url}
+    
+    # Add CSRF token explicitly to context
+    context.update(csrf(request))
 
     if request.method == 'POST':
         username = request.POST.get('username')
@@ -125,7 +146,7 @@ def login_view(request):
         else:
             messages.error(request, 'Invalid username or password.')
     
-    return render(request, 'auth/login.html', {'next': next_url})
+    return render(request, 'auth/login.html', context)
 
 @ensure_csrf_cookie
 def faculty_login(request):
@@ -212,6 +233,8 @@ def faculty_dashboard(request):
     recent_reservations = EquipmentUsage.objects.filter(
         Q(status='pending') |
         Q(status='approved') |
+        Q(status='pending_photo') |
+        Q(status='photo_submitted') |
         Q(status='checked_out')
     ).select_related('user', 'equipment').order_by('-checkout_time')[:5]
 
@@ -222,9 +245,10 @@ def faculty_dashboard(request):
 
     # Get reservation statistics
     active_reservations = EquipmentUsage.objects.filter(
-        Q(status='approved') | Q(status='checked_out')
+        Q(status='approved') | Q(status='pending_photo') | Q(status='photo_submitted') | Q(status='checked_out')
     ).count()
     pending_reservations = EquipmentUsage.objects.filter(status='pending').count()
+    pending_photos = EquipmentUsage.objects.filter(status='photo_submitted').count()
 
     # Get equipment needing maintenance
     maintenance_alerts = MultimediaEquipment.objects.filter(
@@ -240,6 +264,7 @@ def faculty_dashboard(request):
         'maintenance_needed': maintenance_needed,
         'active_reservations': active_reservations,
         'pending_reservations': pending_reservations,
+        'pending_photos': pending_photos,
         'recent_reservations': recent_reservations,
         'maintenance_alerts': maintenance_alerts,
         'all_equipment': all_equipment,
@@ -563,37 +588,43 @@ def report_maintenance(request):
 
 @login_required
 def manage_reservations(request):
-    """View for faculty to manage equipment reservations."""
+    """View for faculty to manage all equipment reservations."""
     if not request.user.userprofile.is_faculty():
-        messages.error(request, 'Only faculty members can access this page.')
+        messages.error(request, 'Only faculty members can manage reservations.')
         return redirect('faculty_login')
     
     # Get filter parameters
     status = request.GET.get('status', '')
-    start_date = request.GET.get('start_date', '')
-    end_date = request.GET.get('end_date', '')
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
     search_query = request.GET.get('search', '')
     
     # Base queryset
-    reservations = EquipmentUsage.objects.all().order_by('-checkout_time')
+    reservations = EquipmentUsage.objects.select_related(
+        'user', 'equipment', 'equipment__category'
+    ).order_by('-checkout_time')
     
     # Apply filters
     if status:
         reservations = reservations.filter(status=status)
     
+    # Add filter for pending photo reviews if requested
+    if request.GET.get('photo_review', '') == 'true':
+        reservations = reservations.filter(status='photo_submitted')
+    
     if start_date:
         try:
-            start_date = datetime.strptime(start_date, '%Y-%m-%d')
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
             reservations = reservations.filter(checkout_time__date__gte=start_date)
-        except ValueError:
-            messages.warning(request, 'Invalid start date format.')
+        except (ValueError, TypeError):
+            start_date = None
     
     if end_date:
         try:
-            end_date = datetime.strptime(end_date, '%Y-%m-%d')
+            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
             reservations = reservations.filter(checkout_time__date__lte=end_date)
-        except ValueError:
-            messages.warning(request, 'Invalid end date format.')
+        except (ValueError, TypeError):
+            end_date = None
     
     if search_query:
         reservations = reservations.filter(
@@ -645,7 +676,7 @@ def approve_reservation(request, reservation_id):
                 
             # Process the approval
             reservation = form.save(commit=False)
-            reservation.status = 'approved'
+            reservation.status = 'pending_photo'  # Change to pending_photo instead of approved
             reservation.approved_by = request.user
             reservation.approved_at = timezone.now()
             reservation.save()
@@ -860,8 +891,59 @@ def is_student_blacklisted(user):
             - is_blacklisted (bool): True if the user is blacklisted
             - blacklist_record (BlacklistedStudent): The blacklist record if found, None otherwise
     """
+    if user.is_anonymous:
+        return False, None
+        
     blacklist_record = BlacklistedStudent.objects.filter(student=user, is_active=True).first()
-    return (blacklist_record is not None, blacklist_record)
+    return blacklist_record is not None, blacklist_record
+
+def has_active_reservation(user, equipment_id):
+    """Check if a user already has an active reservation for specified equipment.
+    
+    Args:
+        user: The user to check
+        equipment_id: ID of the equipment to check
+        
+    Returns:
+        bool: True if user has an active reservation, False otherwise
+    """
+    active_statuses = ['pending', 'approved', 'pending_photo', 'photo_submitted', 'checked_out']
+    
+    # Check for active reservations with the standard statuses
+    existing_active_reservations = EquipmentUsage.objects.filter(
+        user=user,
+        equipment_id=equipment_id,
+        status__in=active_statuses
+    ).count()
+    
+    # Also check for any overdue reservations that haven't been marked as returned
+    now = timezone.now()
+    overdue_reservations = EquipmentUsage.objects.filter(
+        user=user,
+        equipment_id=equipment_id,
+        expected_return_time__lt=now,
+        status='checked_out'  # Only checked out items can be overdue
+    ).count()
+    
+    return existing_active_reservations > 0 or overdue_reservations > 0
+
+def has_any_overdue_items(user):
+    """Check if a user has any overdue items across all equipment.
+    
+    Args:
+        user: The user to check
+        
+    Returns:
+        tuple: (has_overdue, overdue_reservation) - whether user has overdue items and the first overdue reservation
+    """
+    now = timezone.now()
+    overdue_reservation = EquipmentUsage.objects.filter(
+        user=user,
+        expected_return_time__lt=now,
+        status='checked_out'
+    ).first()
+    
+    return (overdue_reservation is not None, overdue_reservation)
 
 @login_required
 @student_required
@@ -896,7 +978,34 @@ def add_to_cart(request, equipment_id):
     is_blacklisted, blacklist_record = is_student_blacklisted(request.user)
     if is_blacklisted:
         messages.error(request, f'You cannot make reservations because you are blacklisted. Reason: {blacklist_record.reason}')
-        return redirect('browse_equipment')
+        return redirect('equipment_list')
+    
+    # First check if the student has ANY overdue items (regardless of equipment type)
+    has_overdue, overdue_item = has_any_overdue_items(request.user)
+    if has_overdue:
+        equipment_name = overdue_item.equipment.name if overdue_item.equipment else "Unknown equipment"
+        messages.error(request, 
+            f'You have an overdue item ({equipment_name}, due {overdue_item.expected_return_time.strftime("%Y-%m-%d %H:%M")}). '
+            f'Please return all overdue items before making new reservations.'
+        )
+        return redirect('equipment_list')
+    
+    # Then check if user already has an active reservation for this specific equipment
+    if has_active_reservation(request.user, equipment_id):
+        # Check specifically for overdue items
+        now = timezone.now()
+        overdue_reservation = EquipmentUsage.objects.filter(
+            user=request.user,
+            equipment_id=equipment_id,
+            expected_return_time__lt=now,
+            status='checked_out'
+        ).first()
+        
+        if overdue_reservation:
+            messages.error(request, f'You have an overdue reservation for this equipment (due {overdue_reservation.expected_return_time.strftime("%Y-%m-%d %H:%M")}). Please return it before making a new reservation.')
+        else:
+            messages.error(request, 'You already have an active reservation for this equipment. You cannot reserve the same item again until your current reservation is completed.')
+        return redirect('equipment_list')
         
     equipment = get_object_or_404(MultimediaEquipment, id=equipment_id, is_available=True)
     
@@ -997,12 +1106,22 @@ def checkout_cart(request):
         )
         return redirect('view_cart')
     
+    # Check if the student has ANY overdue items (regardless of equipment type)
+    has_overdue, overdue_item = has_any_overdue_items(request.user)
+    if has_overdue:
+        equipment_name = overdue_item.equipment.name if overdue_item.equipment else "Unknown equipment"
+        messages.error(request, 
+            f'You have an overdue item ({equipment_name}, due {overdue_item.expected_return_time.strftime("%Y-%m-%d %H:%M")}). '
+            f'Please return all overdue items before making new reservations.'
+        )
+        return redirect('view_cart')
+    
     cart_items = CartItem.objects.filter(user=request.user).select_related('equipment')
     
     if not cart_items:
         messages.warning(request, 'Your cart is empty. Please add items before checking out.')
-        return redirect('browse_equipment')
-
+        return redirect('equipment_list')
+    
     if request.method == 'POST':
         try:
             with transaction.atomic():
@@ -1057,6 +1176,22 @@ def checkout_cart(request):
                     if item.quantity > equipment.available_quantity:
                         raise ValueError(f'Only {equipment.available_quantity} units of {equipment.name} are available.')
                         
+                    # Check if user already has an active reservation for this equipment
+                    if has_active_reservation(request.user, equipment.id):
+                        # Check specifically for overdue items
+                        now = timezone.now()
+                        overdue_reservation = EquipmentUsage.objects.filter(
+                            user=request.user,
+                            equipment_id=equipment.id,
+                            expected_return_time__lt=now,
+                            status='checked_out'
+                        ).first()
+                        
+                        if overdue_reservation:
+                            raise ValueError(f'You have an overdue reservation for {equipment.name} (due {overdue_reservation.expected_return_time.strftime("%Y-%m-%d %H:%M")}). Please return it before making a new reservation.')
+                        else:
+                            raise ValueError(f'You already have an active reservation for {equipment.name}. You cannot reserve the same item again until your current reservation is completed.')
+                        
                     # Create reservation using EquipmentUsage with quantity
                     usage = EquipmentUsage.objects.create(
                         user=request.user,
@@ -1068,7 +1203,7 @@ def checkout_cart(request):
                         quantity=item.quantity
                     )
                     
-                    # Update available quantity (temporarily reduce while pending approval)
+                    # Update equipment availability
                     equipment.available_quantity -= item.quantity
                     equipment.save()
                 
@@ -1097,8 +1232,31 @@ def faculty_analytics(request):
     # Current date for comparisons
     current_date = timezone.now()
     
-    # Get all equipment usages
-    usages = EquipmentUsage.objects.all()
+    # Default date range: last 30 days
+    end_date = timezone.now().date()
+    start_date = end_date - timedelta(days=30)
+    
+    # Process date range filter from form
+    if 'daterange' in request.GET and request.GET.get('daterange'):
+        date_range = request.GET.get('daterange').split(' - ')
+        if len(date_range) == 2:
+            try:
+                # Date format from the picker is MM/DD/YYYY
+                start_date = datetime.strptime(date_range[0], '%m/%d/%Y').date()
+                end_date = datetime.strptime(date_range[1], '%m/%d/%Y').date()
+            except ValueError:
+                # If there's an error parsing dates, use the defaults
+                pass
+    
+    # Convert dates to datetime for query
+    start_datetime = timezone.datetime.combine(start_date, timezone.datetime.min.time())
+    end_datetime = timezone.datetime.combine(end_date, timezone.datetime.max.time())
+    
+    # Get equipment usages within the date range
+    usages = EquipmentUsage.objects.filter(
+        checkout_time__gte=start_datetime,
+        checkout_time__lte=end_datetime
+    )
     
     # 1. Equipment Utilization Rate
     total_equipment_count = MultimediaEquipment.objects.count()
@@ -1132,11 +1290,11 @@ def faculty_analytics(request):
         days_data[item['day']]['count'] = item['count']
     
     # 4. Popular Equipment (Top 10)
-    popular_equipment = usages.values(
+    popular_equipment = list(usages.values(
         'equipment__id', 'equipment__name', 'equipment__equipment_type'
     ).annotate(
         usage_count=Count('id')
-    ).order_by('-usage_count')[:10]
+    ).order_by('-usage_count')[:10])
     
     # 5. Underutilized Equipment (Bottom 10)
     # First, get counts for all equipment that has been used
@@ -1151,11 +1309,11 @@ def faculty_analytics(request):
     underutilized_equipment = sorted(all_equipment, key=lambda x: x['usage_count'])[:10]
     
     # 6. Category-wise Usage
-    category_usage = usages.values(
+    category_usage = list(usages.values(
         'equipment__category__id', 'equipment__category__name'
     ).annotate(
         usage_count=Count('id')
-    ).order_by('-usage_count')
+    ).order_by('-usage_count'))
     
     # 7. Reservation Duration Statistics
     durations = []
@@ -1172,26 +1330,39 @@ def faculty_analytics(request):
     max_duration = max(durations) if durations else 0
     
     # 8. Equipment that is frequently overbooked
-    overbooked_equipment = usages.filter(
+    overbooked_equipment = list(usages.filter(
         status='rejected'
     ).values(
         'equipment__id', 'equipment__name'
     ).annotate(
         reject_count=Count('id')
-    ).order_by('-reject_count')[:5]
+    ).order_by('-reject_count')[:5])
+
+    # 9. Status distribution
+    status_distribution = dict(usages.values('status').annotate(
+        count=Count('id')).values_list('status', 'count'))
     
     # Prepare context data
     context = {
         'utilization_rate': round(utilization_rate, 1),
-        'hours_data': hours_data,
-        'days_data': list(days_data.values()),
-        'popular_equipment': popular_equipment,
-        'underutilized_equipment': underutilized_equipment,
-        'category_usage': category_usage,
+        'hours_data': list(hours_data.values()),
+        'days_data': [days_data[i+1]['count'] for i in range(7)],
+        # Keep the original queryset version for template rendering
+        'popular_equipment_display': popular_equipment,
+        'underutilized_equipment_display': underutilized_equipment,
+        'category_usage_display': category_usage,
+        'overbooked_equipment_display': overbooked_equipment,
+        # JSON versions for JavaScript
+        'popular_equipment': json.dumps(popular_equipment, cls=DjangoJSONEncoder),
+        'underutilized_equipment': json.dumps(underutilized_equipment, cls=DjangoJSONEncoder),
+        'category_usage': json.dumps(category_usage, cls=DjangoJSONEncoder),
+        'durations': json.dumps(durations, cls=DjangoJSONEncoder),
         'avg_duration': round(avg_duration, 1),
         'max_duration': round(max_duration, 1),
-        'overbooked_equipment': overbooked_equipment,
-        'active_tab': 'analytics'
+        'status_distribution': json.dumps(status_distribution, cls=DjangoJSONEncoder),
+        'active_tab': 'analytics',
+        'start_date': start_date,
+        'end_date': end_date
     }
     
     return render(request, 'faculty/analytics.html', context)
@@ -1199,41 +1370,28 @@ def faculty_analytics(request):
 @login_required
 @faculty_required
 def equipment_detail_analytics(request, equipment_id):
-    """Detailed analytics for a specific equipment item."""
-    equipment = get_object_or_404(MultimediaEquipment, id=equipment_id)
+    """View analytics for a specific equipment."""
+    if not request.user.userprofile.is_faculty():
+        messages.error(request, 'Only faculty members can view analytics.')
+        return redirect('faculty_login')
     
-    # Date range filters
-    start_date_str = request.GET.get('start_date')
-    end_date_str = request.GET.get('end_date')
+    try:
+        equipment = MultimediaEquipment.objects.get(id=equipment_id)
+    except MultimediaEquipment.DoesNotExist:
+        messages.error(request, 'Equipment not found.')
+        return redirect('faculty_analytics')
     
-    # Handle daterangepicker format if coming from the UI
-    daterange = request.GET.get('daterange')
-    if daterange:
+    # Default to last 30 days if not specified
+    end_date = timezone.now().date()
+    start_date = end_date - timedelta(days=30)
+    
+    if request.GET.get('start_date') and request.GET.get('end_date'):
         try:
-            start_date_str, end_date_str = daterange.split(' - ')
-            start_date = timezone.datetime.strptime(start_date_str, '%m/%d/%Y').date()
-            end_date = timezone.datetime.strptime(end_date_str, '%m/%d/%Y').date()
-        except (ValueError, IndexError):
-            # Default to last 30 days if format is incorrect
-            start_date = (timezone.now() - timedelta(days=30)).date()
-            end_date = timezone.now().date()
-    else:
-        # Default to last 30 days if no date range is specified
-        if not start_date_str:
-            start_date = (timezone.now() - timedelta(days=30)).date()
-        else:
-            try:
-                start_date = timezone.datetime.strptime(start_date_str, '%Y-%m-%d').date()
-            except ValueError:
-                start_date = (timezone.now() - timedelta(days=30)).date()
-        
-        if not end_date_str:
-            end_date = timezone.now().date()
-        else:
-            try:
-                end_date = timezone.datetime.strptime(end_date_str, '%Y-%m-%d').date()
-            except ValueError:
-                end_date = timezone.now().date()
+            start_date = datetime.strptime(request.GET.get('start_date'), '%Y-%m-%d').date()
+            end_date = datetime.strptime(request.GET.get('end_date'), '%Y-%m-%d').date()
+        except ValueError:
+            # If date parsing fails, use the defaults
+            pass
     
     # Convert dates to datetime for query
     start_datetime = timezone.datetime.combine(start_date, timezone.datetime.min.time())
@@ -1252,7 +1410,21 @@ def equipment_detail_analytics(request, equipment_id):
     
     # Calculate utilization rate (% of days the equipment was used)
     date_range = (end_date - start_date).days + 1
-    days_used = usages.dates('checkout_time', 'day').count()
+    
+    # Get unique dates when the equipment was used
+    if usages.exists():
+        # For datetime objects, use .date() method
+        checkout_dates = set()
+        for usage in usages:
+            # Check if checkout_time is already a date or a datetime
+            if hasattr(usage.checkout_time, 'date'):
+                checkout_dates.add(usage.checkout_time.date())
+            else:
+                checkout_dates.add(usage.checkout_time)
+        days_used = len(checkout_dates)
+    else:
+        days_used = 0
+    
     utilization_rate = (days_used / date_range * 100) if date_range > 0 else 0
     
     # Calculate average duration
@@ -1284,23 +1456,33 @@ def equipment_detail_analytics(request, equipment_id):
             'description': f'Purpose: {usage.purpose or "Not specified"}'
         })
     
-    # Add maintenance records
-    maintenance_records = MaintenanceRecord.objects.filter(
-        equipment=equipment,
-        maintenance_date__gte=start_datetime,
-        maintenance_date__lte=end_datetime
-    )
+    # Get all queries that might use the equipment in timeline
+    # First, query raw SQL to get the correct schema
+    from django.db import connection
     
-    for record in maintenance_records:
-        end_time = record.maintenance_date + timedelta(hours=2)  # Assume 2 hours for maintenance
+    maintenance_query = "SELECT * FROM demoapp_maintenancerecord WHERE equipment_id = %s AND reported_date >= %s AND reported_date <= %s"
+    with connection.cursor() as cursor:
+        cursor.execute(maintenance_query, [equipment.id, start_datetime, end_datetime])
+        columns = [col[0] for col in cursor.description]
+        maintenance_records_data = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    
+    # Add maintenance records from raw query
+    for record in maintenance_records_data:
+        # Use a 2-hour default duration for maintenance
+        reported_date = record['reported_date']
+        if isinstance(reported_date, str):
+            reported_date = datetime.fromisoformat(reported_date.replace('Z', '+00:00'))
+        
+        end_time = reported_date + timedelta(hours=2)
+        
         timeline_items.append({
-            'id': f'maintenance-{record.id}',
-            'content': f'Maintenance: {record.maintenance_type}',
-            'start': record.maintenance_date.isoformat(),
+            'id': f'maintenance-{record["id"]}',
+            'content': f'Maintenance: {record["issue_description"]}',
+            'start': reported_date.isoformat(),
             'end': end_time.isoformat(),
             'group': 2,
             'className': 'maintenance',
-            'description': record.notes
+            'description': record.get('resolution_notes', 'No notes')
         })
     
     # Daily usage data
@@ -1322,23 +1504,26 @@ def equipment_detail_analytics(request, equipment_id):
     
     # Update with actual usage
     for usage in daily_usage:
-        day_index = (usage['day'].date() - start_date).days
+        day = usage['day']
+        # Check if day is a datetime or already a date
+        if hasattr(day, 'date'):
+            day = day.date()
+        
+        day_index = (day - start_date).days
         if 0 <= day_index < len(daily_data):
             daily_data[day_index] = usage['count']
     
     daily_usage_data = {
-        'labels': daily_labels,
+        'labels': [str(entry['day']) for entry in daily_usage],
         'datasets': [{
             'label': 'Reservations',
-            'data': daily_data,
-            'backgroundColor': 'rgba(54, 162, 235, 0.2)',
-            'borderColor': 'rgba(54, 162, 235, 1)',
-            'borderWidth': 1,
-            'tension': 0.1
+            'data': [entry['count'] for entry in daily_usage],
+            'borderColor': 'rgba(75, 192, 192, 1)',
+            'backgroundColor': 'rgba(75, 192, 192, 0.2)',
+            'fill': True
         }]
     }
     
-    # Hourly usage data
     hourly_usage = usages.annotate(
         hour=ExtractHour('checkout_time')
     ).values('hour').annotate(
@@ -1349,46 +1534,38 @@ def equipment_detail_analytics(request, equipment_id):
     for item in hourly_usage:
         hours_data[item['hour']] = item['count']
     
-    hourly_labels = [f'{hour}:00' for hour in range(24)]
-    hourly_data = [hours_data[hour] for hour in range(24)]
-    
     hourly_usage_data = {
-        'labels': hourly_labels,
+        'labels': [f"{hour}:00" for hour in range(24)],
         'datasets': [{
             'label': 'Reservations',
-            'data': hourly_data,
-            'backgroundColor': 'rgba(255, 99, 132, 0.2)',
-            'borderColor': 'rgba(255, 99, 132, 1)',
+            'data': [next((entry['count'] for entry in hourly_usage if entry['hour'] == hour), 0) for hour in range(24)],
+            'backgroundColor': 'rgba(54, 162, 235, 0.5)',
+            'borderColor': 'rgba(54, 162, 235, 1)',
             'borderWidth': 1
         }]
     }
     
-    # Department usage data
-    department_usage = usages.values(
-        'user__userprofile__department'
+    # Department usage data - group by username instead of department
+    user_usage = usages.values(
+        'user__username'
     ).annotate(
         count=Count('id')
-    ).order_by('-count')
+    ).order_by('-count')[:10]  # Limit to top 10 users
     
-    department_labels = [item['user__userprofile__department'] or 'Unknown' for item in department_usage]
-    department_data = [item['count'] for item in department_usage]
+    user_labels = [item['user__username'] for item in user_usage]
+    user_usage_values = [item['count'] for item in user_usage]
     
-    department_usage_data = {
-        'labels': department_labels,
+    user_usage_data = {
+        'labels': user_labels,
         'datasets': [{
-            'label': 'Reservations by Department',
-            'data': department_data,
+            'data': user_usage_values,
             'backgroundColor': [
-                'rgba(255, 99, 132, 0.6)',
-                'rgba(54, 162, 235, 0.6)',
-                'rgba(255, 206, 86, 0.6)',
-                'rgba(75, 192, 192, 0.6)',
-                'rgba(153, 102, 255, 0.6)',
-                'rgba(255, 159, 64, 0.6)',
-                'rgba(199, 199, 199, 0.6)',
-                'rgba(83, 102, 255, 0.6)',
-                'rgba(40, 159, 64, 0.6)',
-                'rgba(210, 199, 199, 0.6)',
+                'rgba(255, 99, 132, 0.5)',
+                'rgba(54, 162, 235, 0.5)',
+                'rgba(255, 206, 86, 0.5)',
+                'rgba(75, 192, 192, 0.5)',
+                'rgba(153, 102, 255, 0.5)',
+                'rgba(255, 159, 64, 0.5)'
             ],
             'borderColor': [
                 'rgba(255, 99, 132, 1)',
@@ -1396,11 +1573,7 @@ def equipment_detail_analytics(request, equipment_id):
                 'rgba(255, 206, 86, 1)',
                 'rgba(75, 192, 192, 1)',
                 'rgba(153, 102, 255, 1)',
-                'rgba(255, 159, 64, 1)',
-                'rgba(199, 199, 199, 1)',
-                'rgba(83, 102, 255, 1)',
-                'rgba(40, 159, 64, 1)',
-                'rgba(210, 199, 199, 1)',
+                'rgba(255, 159, 64, 1)'
             ],
             'borderWidth': 1
         }]
@@ -1445,7 +1618,7 @@ def equipment_detail_analytics(request, equipment_id):
     
     # User statistics
     user_stats = usages.values(
-        'user__username', 'user__userprofile__department'
+        'user__username'
     ).annotate(
         total_reservations=Count('id'),
         avg_duration=Avg(
@@ -1458,11 +1631,11 @@ def equipment_detail_analytics(request, equipment_id):
     ).order_by('-total_reservations')
     
     # Convert timeline data to JSON
-    timeline_data_json = json.dumps(timeline_items)
-    daily_usage_data_json = json.dumps(daily_usage_data)
-    hourly_usage_data_json = json.dumps(hourly_usage_data)
-    department_usage_data_json = json.dumps(department_usage_data)
-    rejection_data_json = json.dumps(rejection_data)
+    timeline_data_json = json.dumps(timeline_items, default=str)
+    daily_usage_data_json = json.dumps(daily_usage_data, default=str)
+    hourly_usage_data_json = json.dumps(hourly_usage_data, default=str)
+    user_usage_data_json = json.dumps(user_usage_data, default=str)
+    rejection_data_json = json.dumps(rejection_data, default=str)
     
     context = {
         'equipment': equipment,
@@ -1473,7 +1646,7 @@ def equipment_detail_analytics(request, equipment_id):
         'timeline_data': timeline_data_json,
         'daily_usage_data': daily_usage_data_json,
         'hourly_usage_data': hourly_usage_data_json,
-        'department_usage_data': department_usage_data_json,
+        'user_usage_data': user_usage_data_json,
         'rejection_data': rejection_data_json,
         'user_stats': user_stats,
         'start_date': start_date,
@@ -1516,9 +1689,6 @@ def blacklist_student(request, student_id):
         
         try:
             student = User.objects.get(id=student_id)
-            if not hasattr(student, 'userprofile') or student.userprofile.is_faculty():
-                messages.error(request, 'Selected user is not a student.')
-                return redirect('manage_blacklist')
             
             # Check if student is already blacklisted
             if BlacklistedStudent.objects.filter(student=student).exists():
@@ -1536,7 +1706,7 @@ def blacklist_student(request, student_id):
         except User.DoesNotExist:
             messages.error(request, 'Student not found.')
             return redirect('manage_blacklist')
-    
+
     # Get student details
     try:
         student = User.objects.get(id=student_id)
@@ -1567,3 +1737,433 @@ def remove_from_blacklist(request, blacklist_id):
         return redirect('manage_blacklist')
     
     return render(request, 'faculty/blacklist/remove_from_blacklist.html', {'blacklist': blacklist_record})
+
+@login_required
+def upload_equipment_photo(request, reservation_id):
+    """View for students to upload equipment photos before checkout"""
+    if request.user.userprofile.is_faculty():
+        messages.error(request, 'Only students can upload equipment photos.')
+        return redirect('home')
+    
+    reservation = get_object_or_404(EquipmentUsage, id=reservation_id, user=request.user)
+    
+    # Check if reservation is in the correct status
+    if reservation.status != 'pending_photo':
+        if reservation.status == 'photo_submitted':
+            messages.info(request, 'Your photo has already been submitted and is awaiting review by faculty.')
+        elif reservation.status == 'approved':
+            messages.info(request, 'Your reservation has been approved but does not require a photo upload.')
+        elif reservation.status == 'rejected':
+            messages.error(request, 'This reservation has been rejected and cannot be processed further.')
+        elif reservation.status == 'checked_out':
+            messages.info(request, 'This equipment has already been checked out.')
+        else:
+            messages.error(request, 'This reservation is not in the photo upload stage.')
+        return redirect('my_reservations')
+    
+    if request.method == 'POST':
+        form = EquipmentPhotoUploadForm(request.POST, request.FILES, instance=reservation)
+        if form.is_valid():
+            reservation = form.save()
+            messages.success(request, 'Equipment photo uploaded successfully. Your reservation is now awaiting final checkout.')
+            return redirect('my_reservations')
+    else:
+        form = EquipmentPhotoUploadForm(instance=reservation)
+        
+        # Check if this is a re-upload after a rejection
+        if hasattr(reservation, 'photo_uploaded_at') and reservation.photo_uploaded_at is not None:
+            messages.warning(request, 'Your previous photo was rejected. Please upload a clearer photo of the equipment.')
+    
+    context = {
+        'form': form,
+        'reservation': reservation
+    }
+    
+    return render(request, 'student/reservations/upload_photo.html', context)
+
+@login_required
+def review_equipment_photo(request, reservation_id):
+    """View for faculty to review equipment photos and complete checkout process"""
+    if not request.user.userprofile.is_faculty():
+        messages.error(request, 'Only faculty members can review equipment photos.')
+        return redirect('home')
+    
+    reservation = get_object_or_404(EquipmentUsage, id=reservation_id)
+    
+    # Check if reservation is in the correct status
+    if reservation.status != 'photo_submitted':
+        messages.error(request, 'This reservation is not in the photo review stage.')
+        return redirect('manage_reservations')
+    
+    if request.method == 'POST':
+        if 'approve_photo' in request.POST:
+            # Update equipment availability
+            equipment = reservation.equipment
+            if reservation.quantity <= equipment.available_quantity:
+                equipment.available_quantity -= reservation.quantity
+                equipment.save()
+                
+                # Complete checkout
+                reservation.status = 'checked_out'
+                reservation.save()
+                
+                messages.success(request, 'Photo approved and equipment checked out successfully.')
+            else:
+                messages.error(request, f'Cannot complete checkout. Only {equipment.available_quantity} units of {equipment.name} are available.')
+            
+            return redirect('manage_reservations')
+            
+        elif 'reject_photo' in request.POST:
+            rejection_reason = request.POST.get('rejection_reason', '')
+            if rejection_reason:
+                # Store the rejection reason in the approval_notes field
+                reservation.approval_notes = f"Photo rejected: {rejection_reason}"
+            reservation.status = 'pending_photo'  # Reset to pending_photo for student to try again
+            reservation.save()
+            messages.warning(request, 'Photo rejected. Student will be asked to upload a new photo.')
+            return redirect('manage_reservations')
+    
+    context = {
+        'reservation': reservation
+    }
+    
+    return render(request, 'faculty/equipment/review_photo.html', context)
+
+@login_required
+def maintenance_list(request):
+    """Display list of maintenance records for faculty."""
+    if not request.user.userprofile.is_faculty():
+        messages.error(request, 'Only faculty members can access this page.')
+        return redirect('faculty_login')
+    
+    # Get query parameters for filtering
+    equipment_id = request.GET.get('equipment')
+    status = request.GET.get('status')
+    
+    # Base queryset
+    records = MaintenanceRecord.objects.all().order_by('-reported_date')
+    
+    # Apply filters
+    if equipment_id:
+        records = records.filter(equipment_id=equipment_id)
+    
+    if status == 'pending':
+        records = records.filter(resolved_date__isnull=True)
+    elif status == 'resolved':
+        records = records.filter(resolved_date__isnull=False)
+    
+    # Pagination
+    paginator = Paginator(records, 9)  # 9 records per page
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    # Get list of equipment for filtering
+    equipment_list = MultimediaEquipment.objects.all().order_by('name')
+    
+    return render(request, 'faculty/maintenance/maintenance_list.html', {
+        'maintenance_records': page_obj,
+        'equipment_list': equipment_list
+    })
+
+@login_required
+def maintenance_create(request):
+    """Create a new maintenance record by faculty."""
+    if not request.user.userprofile.is_faculty():
+        messages.error(request, 'Only faculty members can access this page.')
+        return redirect('faculty_login')
+    
+    if request.method == 'POST':
+        form = MaintenanceRecordForm(request.POST)
+        if form.is_valid():
+            record = form.save(commit=False)
+            record.reported_by = request.user
+            record.save()
+            
+            # Update equipment condition
+            equipment = record.equipment
+            equipment.condition = 'needs_repair'
+            equipment.save()
+            
+            messages.success(request, 'Maintenance issue reported successfully.')
+            return redirect('maintenance_list')
+    else:
+        form = MaintenanceRecordForm()
+        # Remove resolution fields for creation
+        form.fields.pop('resolution_notes', None)
+        form.fields.pop('resolved_date', None)
+    
+    return render(request, 'faculty/maintenance/maintenance_form.html', {
+        'form': form,
+        'action': 'Report'
+    })
+
+@login_required
+def maintenance_detail(request, pk):
+    """View details of a maintenance record."""
+    if not request.user.userprofile.is_faculty():
+        messages.error(request, 'Only faculty members can access this page.')
+        return redirect('faculty_login')
+    
+    maintenance = get_object_or_404(MaintenanceRecord, pk=pk)
+    
+    return render(request, 'faculty/maintenance/maintenance_detail.html', {
+        'maintenance': maintenance
+    })
+
+@login_required
+def maintenance_resolve(request, pk):
+    """Mark a maintenance record as resolved."""
+    if not request.user.userprofile.is_faculty():
+        messages.error(request, 'Only faculty members can access this page.')
+        return redirect('faculty_login')
+    
+    maintenance = get_object_or_404(MaintenanceRecord, pk=pk)
+    
+    if request.method == 'POST':
+        form = MaintenanceRecordForm(request.POST, instance=maintenance)
+        if form.is_valid():
+            record = form.save()
+            
+            # Update equipment condition if needed
+            equipment = record.equipment
+            equipment.condition = 'good'  # Reset to good after repair
+            equipment.last_maintained = timezone.now()
+            equipment.save()
+            
+            messages.success(request, 'Maintenance record updated successfully.')
+            return redirect('maintenance_list')
+    else:
+        form = MaintenanceRecordForm(instance=maintenance)
+        # Only include resolution fields
+        for field_name in list(form.fields.keys()):
+            if field_name not in ['resolution_notes', 'resolved_date']:
+                form.fields[field_name] = form.fields[field_name]
+                form.fields[field_name].widget.attrs['readonly'] = True
+        
+        # Set default resolved date to now
+        form.initial['resolved_date'] = timezone.now()
+    
+    return render(request, 'faculty/maintenance/maintenance_form.html', {
+        'form': form,
+        'action': 'Resolve'
+    })
+
+@login_required
+def admin_student_management(request):
+    """Admin view for managing all students with advanced filtering and blacklisting."""
+    # Strict security check - must be staff, superuser, and not faculty
+    if not request.user.is_staff or not request.user.is_superuser or hasattr(request.user, 'userprofile') and request.user.userprofile.is_faculty():
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('home')
+    
+    # Get all users with student profiles
+    students = User.objects.filter(userprofile__user_type='student')
+    
+    # Process search and filters
+    search_query = request.GET.get('search', '')
+    blacklist_status = request.GET.get('blacklist_status', '')
+    active_status = request.GET.get('active_status', '')
+    
+    # Apply filters
+    if search_query:
+        students = students.filter(
+            Q(username__icontains=search_query) | 
+            Q(email__icontains=search_query) | 
+            Q(first_name__icontains=search_query) | 
+            Q(last_name__icontains=search_query) |
+            Q(userprofile__number__icontains=search_query)
+        )
+    
+    if blacklist_status:
+        if blacklist_status == 'blacklisted':
+            # Students who are currently blacklisted
+            blacklisted_ids = BlacklistedStudent.objects.filter(is_active=True).values_list('student_id', flat=True)
+            students = students.filter(id__in=blacklisted_ids)
+        elif blacklist_status == 'not_blacklisted':
+            # Students who are not blacklisted
+            blacklisted_ids = BlacklistedStudent.objects.filter(is_active=True).values_list('student_id', flat=True)
+            students = students.exclude(id__in=blacklisted_ids)
+    
+    if active_status:
+        students = students.filter(is_active=(active_status == 'active'))
+    
+    # Get blacklist info for all students in one query to avoid N+1 problem
+    active_blacklists = {b.student_id: b for b in BlacklistedStudent.objects.filter(is_active=True)}
+    
+    # Annotate students with reservation counts
+    students = students.annotate(
+        reservation_count=Count('equipmentusage', distinct=True),
+        overdue_count=Count('equipmentusage', 
+                           filter=Q(equipmentusage__status='overdue'),
+                           distinct=True)
+    )
+    
+    # Pagination
+    paginator = Paginator(students, 20)  # Show 20 students per page
+    page = request.GET.get('page')
+    
+    try:
+        students_page = paginator.page(page)
+    except PageNotAnInteger:
+        students_page = paginator.page(1)
+    except EmptyPage:
+        students_page = paginator.page(paginator.num_pages)
+    
+    # Prepare data for template
+    student_data = []
+    for student in students_page:
+        is_blacklisted = student.id in active_blacklists
+        blacklist_reason = active_blacklists[student.id].reason if is_blacklisted else None
+        
+        student_data.append({
+            'user': student,
+            'is_blacklisted': is_blacklisted,
+            'blacklist_reason': blacklist_reason,
+            'reservation_count': student.reservation_count,
+            'overdue_count': student.overdue_count,
+        })
+    
+    context = {
+        'student_data': student_data,
+        'students_page': students_page,
+        'search_query': search_query,
+        'blacklist_status': blacklist_status,
+        'active_status': active_status,
+        'total_count': students.count(),
+    }
+    
+    return render(request, 'admin/student_management.html', context)
+
+@login_required
+def admin_blacklist_student(request):
+    """Admin view for blacklisting a student."""
+    # Strict security check - must be staff, superuser, and not faculty
+    if not request.user.is_staff or not request.user.is_superuser or hasattr(request.user, 'userprofile') and request.user.userprofile.is_faculty():
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('home')
+    
+    if request.method == 'POST':
+        student_id = request.POST.get('student_id')
+        reason = request.POST.get('reason')
+        
+        if not student_id or not reason:
+            messages.error(request, 'Student ID and reason are required.')
+            return redirect('admin_student_management')
+        
+        try:
+            student = User.objects.get(id=student_id)
+            
+            # Check if student is already blacklisted
+            existing_blacklist = BlacklistedStudent.objects.filter(
+                student=student,
+                is_active=True
+            ).first()
+            
+            if existing_blacklist:
+                messages.warning(request, f'{student.username} is already blacklisted.')
+            else:
+                # Create new blacklist record
+                BlacklistedStudent.objects.create(
+                    student=student,
+                    blacklisted_by=request.user,
+                    reason=reason
+                )
+                messages.success(request, f'{student.username} has been blacklisted successfully.')
+        
+        except User.DoesNotExist:
+            messages.error(request, 'Student not found.')
+    
+    # Redirect back to the referring page or the student management page
+    return redirect(request.META.get('HTTP_REFERER', 'admin_student_management'))
+
+@login_required
+def admin_remove_blacklist(request):
+    """Admin view for removing a student from the blacklist."""
+    # Strict security check - must be staff, superuser, and not faculty
+    if not request.user.is_staff or not request.user.is_superuser or hasattr(request.user, 'userprofile') and request.user.userprofile.is_faculty():
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('home')
+    
+    if request.method == 'POST':
+        student_id = request.POST.get('student_id')
+        removal_notes = request.POST.get('removal_notes', '')
+        
+        if not student_id:
+            messages.error(request, 'Student ID is required.')
+            return redirect('admin_student_management')
+        
+        try:
+            student = User.objects.get(id=student_id)
+            
+            # Find active blacklist record
+            blacklist = BlacklistedStudent.objects.filter(
+                student=student,
+                is_active=True
+            ).first()
+            
+            if blacklist:
+                # Update blacklist record
+                blacklist.is_active = False
+                blacklist.removed_by = request.user
+                blacklist.removed_date = timezone.now()
+                blacklist.removal_notes = removal_notes
+                blacklist.save()
+                
+                messages.success(request, f'{student.username} has been removed from the blacklist.')
+            else:
+                messages.warning(request, f'{student.username} is not currently blacklisted.')
+        
+        except User.DoesNotExist:
+            messages.error(request, 'Student not found.')
+    
+    # Redirect back to the referring page or the student management page
+    return redirect(request.META.get('HTTP_REFERER', 'admin_student_management'))
+
+@login_required
+def admin_bulk_blacklist(request):
+    """Admin view for blacklisting multiple students at once."""
+    # Strict security check - must be staff, superuser, and not faculty
+    if not request.user.is_staff or not request.user.is_superuser or hasattr(request.user, 'userprofile') and request.user.userprofile.is_faculty():
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('home')
+    
+    if request.method == 'POST':
+        student_ids = request.POST.getlist('student_ids')
+        reason = request.POST.get('reason')
+        
+        if not student_ids or not reason:
+            messages.error(request, 'Please select at least one student and provide a reason.')
+            return redirect('admin_student_management')
+        
+        blacklisted_count = 0
+        already_blacklisted = 0
+        
+        for student_id in student_ids:
+            try:
+                student = User.objects.get(id=student_id)
+                
+                # Check if already blacklisted
+                existing = BlacklistedStudent.objects.filter(
+                    student=student,
+                    is_active=True
+                ).exists()
+                
+                if not existing:
+                    BlacklistedStudent.objects.create(
+                        student=student,
+                        blacklisted_by=request.user,
+                        reason=reason
+                    )
+                    blacklisted_count += 1
+                else:
+                    already_blacklisted += 1
+                    
+            except User.DoesNotExist:
+                continue
+        
+        if blacklisted_count > 0:
+            messages.success(request, f'Successfully blacklisted {blacklisted_count} students.')
+        if already_blacklisted > 0:
+            messages.info(request, f'{already_blacklisted} students were already blacklisted.')
+    
+    return redirect('admin_student_management')

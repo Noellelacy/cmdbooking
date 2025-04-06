@@ -92,6 +92,8 @@ class EquipmentUsage(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('approved', 'Approved'),
+        ('pending_photo', 'Photo Required'),
+        ('photo_submitted', 'Photo Submitted'),
         ('rejected', 'Rejected'),
         ('checked_out', 'Checked Out'),
         ('returned', 'Returned'),
@@ -111,6 +113,9 @@ class EquipmentUsage(models.Model):
     approved_at = models.DateTimeField(null=True, blank=True)
     approval_notes = models.TextField(blank=True)
     quantity = models.PositiveIntegerField(default=1)
+    equipment_photo = models.ImageField(upload_to='equipment_photos/%Y/%m/%d/', blank=True, null=True)
+    photo_uploaded_at = models.DateTimeField(null=True, blank=True)
+    photo_notes = models.TextField(blank=True)
     
     def __str__(self):
         return f"{self.equipment.name} (x{self.quantity}) - {self.user.username} ({self.checkout_time})"

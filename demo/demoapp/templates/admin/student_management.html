@@ -1,0 +1,330 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Student Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="h3 mb-0 text-gray-800">Student Management</h1>
+            <p class="mb-4">Manage, filter, and blacklist students from this interface.</p>
+        </div>
+    </div>
+
+    <!-- Filters and Search -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">Search and Filter</h6>
+        </div>
+        <div class="card-body">
+            <form method="get" class="mb-4">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="input-group">
+                            <input type="text" name="search" class="form-control" placeholder="Search by name, email, or ID..." value="{{ search_query }}">
+                            <button class="btn btn-primary" type="submit">
+                                <i class="fas fa-search fa-sm"></i> Search
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <select name="blacklist_status" class="form-select">
+                            <option value="">All Blacklist Status</option>
+                            <option value="blacklisted" {% if blacklist_status == 'blacklisted' %}selected{% endif %}>Blacklisted</option>
+                            <option value="not_blacklisted" {% if blacklist_status == 'not_blacklisted' %}selected{% endif %}>Not Blacklisted</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <select name="active_status" class="form-select">
+                            <option value="">All Account Status</option>
+                            <option value="active" {% if active_status == 'active' %}selected{% endif %}>Active</option>
+                            <option value="inactive" {% if active_status == 'inactive' %}selected{% endif %}>Inactive</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-secondary w-100">Apply Filters</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bulk Actions -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">Bulk Actions</h6>
+            <div>
+                <span class="badge bg-info">{{ total_count }} Students Total</span>
+            </div>
+        </div>
+        <div class="card-body">
+            <form id="bulk-actions-form" method="post" action="{% url 'admin_bulk_blacklist' %}">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="bulk-action-reason" class="form-label">Blacklist Reason:</label>
+                    <textarea id="bulk-action-reason" name="reason" class="form-control" rows="3" required></textarea>
+                </div>
+                <button id="bulk-blacklist-btn" type="button" class="btn btn-danger" disabled>
+                    <i class="fas fa-ban"></i> Blacklist Selected Students
+                </button>
+                <span id="selection-count" class="ms-2">(0 students selected)</span>
+            </form>
+        </div>
+    </div>
+
+    <!-- Student List -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Students</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" id="studentsTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>
+                                <input type="checkbox" id="select-all-students">
+                            </th>
+                            <th>Username</th>
+                            <th>Full Name</th>
+                            <th>Email</th>
+                            <th>Student ID</th>
+                            <th>Reservations</th>
+                            <th>Overdue</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in student_data %}
+                        <tr class="{% if not student.user.is_active %}table-secondary{% elif student.is_blacklisted %}table-danger{% endif %}">
+                            <td>
+                                <input type="checkbox" class="student-select" name="student_ids" value="{{ student.user.id }}"
+                                    {% if student.is_blacklisted %}disabled{% endif %}>
+                            </td>
+                            <td>{{ student.user.username }}</td>
+                            <td>{{ student.user.get_full_name|default:"-" }}</td>
+                            <td>{{ student.user.email|default:"-" }}</td>
+                            <td>{{ student.user.userprofile.number|default:"-" }}</td>
+                            <td>{{ student.reservation_count }}</td>
+                            <td>
+                                {% if student.overdue_count > 0 %}
+                                <span class="badge bg-danger">{{ student.overdue_count }}</span>
+                                {% else %}
+                                0
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if not student.user.is_active %}
+                                <span class="badge bg-secondary">Inactive</span>
+                                {% elif student.is_blacklisted %}
+                                <span class="badge bg-danger" title="{{ student.blacklist_reason }}">Blacklisted</span>
+                                {% else %}
+                                <span class="badge bg-success">Active</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex">
+                                    {% if not student.is_blacklisted %}
+                                    <button type="button" class="btn btn-sm btn-outline-danger me-1" 
+                                            data-bs-toggle="modal" data-bs-target="#blacklistModal"
+                                            data-student-id="{{ student.user.id }}"
+                                            data-student-name="{{ student.user.username }}">
+                                        <i class="fas fa-ban"></i>
+                                    </button>
+                                    {% else %}
+                                    <button type="button" class="btn btn-sm btn-outline-success me-1" 
+                                            data-bs-toggle="modal" data-bs-target="#unblacklistModal"
+                                            data-student-id="{{ student.user.id }}"
+                                            data-student-name="{{ student.user.username }}">
+                                        <i class="fas fa-undo"></i>
+                                    </button>
+                                    {% endif %}
+                                    <a href="{% url 'admin:auth_user_change' student.user.id %}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="9" class="text-center">No students match your criteria.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if students_page.has_other_pages %}
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center mt-4">
+                    {% if students_page.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}{% if blacklist_status %}&blacklist_status={{ blacklist_status }}{% endif %}{% if active_status %}&active_status={{ active_status }}{% endif %}" aria-label="First">
+                            <span aria-hidden="true">&laquo;&laquo;</span>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ students_page.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if blacklist_status %}&blacklist_status={{ blacklist_status }}{% endif %}{% if active_status %}&active_status={{ active_status }}{% endif %}" aria-label="Previous">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% for i in students_page.paginator.page_range %}
+                        {% if students_page.number == i %}
+                            <li class="page-item active"><span class="page-link">{{ i }}</span></li>
+                        {% elif i > students_page.number|add:'-3' and i < students_page.number|add:'3' %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ i }}{% if search_query %}&search={{ search_query }}{% endif %}{% if blacklist_status %}&blacklist_status={{ blacklist_status }}{% endif %}{% if active_status %}&active_status={{ active_status }}{% endif %}">{{ i }}</a>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if students_page.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ students_page.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if blacklist_status %}&blacklist_status={{ blacklist_status }}{% endif %}{% if active_status %}&active_status={{ active_status }}{% endif %}" aria-label="Next">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ students_page.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}{% if blacklist_status %}&blacklist_status={{ blacklist_status }}{% endif %}{% if active_status %}&active_status={{ active_status }}{% endif %}" aria-label="Last">
+                            <span aria-hidden="true">&raquo;&raquo;</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Blacklist Modal -->
+<div class="modal fade" id="blacklistModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{% url 'admin_blacklist_student' %}">
+                {% csrf_token %}
+                <input type="hidden" name="student_id" id="blacklist-student-id">
+                <div class="modal-header">
+                    <h5 class="modal-title">Blacklist Student</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to blacklist <strong id="blacklist-student-name"></strong>?</p>
+                    <p>Blacklisted students will not be able to make new reservations.</p>
+                    
+                    <div class="mb-3">
+                        <label for="blacklist-reason" class="form-label">Reason for Blacklisting:</label>
+                        <textarea name="reason" id="blacklist-reason" class="form-control" rows="3" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Blacklist Student</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Unblacklist Modal -->
+<div class="modal fade" id="unblacklistModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{% url 'admin_remove_blacklist' %}">
+                {% csrf_token %}
+                <input type="hidden" name="student_id" id="unblacklist-student-id">
+                <div class="modal-header">
+                    <h5 class="modal-title">Remove from Blacklist</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to remove <strong id="unblacklist-student-name"></strong> from the blacklist?</p>
+                    <p>This will allow the student to make reservations again.</p>
+                    
+                    <div class="mb-3">
+                        <label for="removal-notes" class="form-label">Removal Notes (Optional):</label>
+                        <textarea name="removal_notes" id="removal-notes" class="form-control" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Remove from Blacklist</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle student selection checkboxes
+        const selectAllCheckbox = document.getElementById('select-all-students');
+        const studentCheckboxes = document.querySelectorAll('.student-select');
+        const bulkBlacklistBtn = document.getElementById('bulk-blacklist-btn');
+        const selectionCountSpan = document.getElementById('selection-count');
+        const bulkActionsForm = document.getElementById('bulk-actions-form');
+
+        // Select all checkbox functionality
+        selectAllCheckbox.addEventListener('change', function() {
+            studentCheckboxes.forEach(checkbox => {
+                if (!checkbox.disabled) {
+                    checkbox.checked = selectAllCheckbox.checked;
+                }
+            });
+            updateSelectionCount();
+        });
+
+        // Individual checkbox functionality
+        studentCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateSelectionCount);
+        });
+
+        // Update selection count and button state
+        function updateSelectionCount() {
+            const checkedCount = document.querySelectorAll('.student-select:checked').length;
+            selectionCountSpan.textContent = `(${checkedCount} students selected)`;
+            bulkBlacklistBtn.disabled = checkedCount === 0;
+        }
+
+        // Handle bulk blacklist button click
+        bulkBlacklistBtn.addEventListener('click', function() {
+            if (confirm('Are you sure you want to blacklist all selected students?')) {
+                bulkActionsForm.submit();
+            }
+        });
+
+        // Blacklist modal functionality
+        const blacklistModal = document.getElementById('blacklistModal');
+        if (blacklistModal) {
+            blacklistModal.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget;
+                const studentId = button.getAttribute('data-student-id');
+                const studentName = button.getAttribute('data-student-name');
+                
+                document.getElementById('blacklist-student-id').value = studentId;
+                document.getElementById('blacklist-student-name').textContent = studentName;
+            });
+        }
+
+        // Unblacklist modal functionality
+        const unblacklistModal = document.getElementById('unblacklistModal');
+        if (unblacklistModal) {
+            unblacklistModal.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget;
+                const studentId = button.getAttribute('data-student-id');
+                const studentName = button.getAttribute('data-student-name');
+                
+                document.getElementById('unblacklist-student-id').value = studentId;
+                document.getElementById('unblacklist-student-name').textContent = studentName;
+            });
+        }
+    });
+</script>
+{% endblock %}

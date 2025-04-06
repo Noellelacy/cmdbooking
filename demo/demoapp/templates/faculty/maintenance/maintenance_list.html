@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+
+{% block css %}
+<style>
+    .maintenance-card {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+    .maintenance-card:hover {
+        transform: translateY(-5px);
+    }
+    .status-pending {
+        color: #dc3545;
+    }
+    .status-resolved {
+        color: #198754;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Maintenance Records</h2>
+        <div>
+            <a href="{% url 'maintenance_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i> Report Maintenance Issue
+            </a>
+            <a href="{% url 'faculty_dashboard' %}" class="btn btn-outline-primary ms-2">
+                <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    {% if messages %}
+    <div class="mb-4">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">Filter Records</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label for="equipment" class="form-label">Equipment</label>
+                    <select name="equipment" id="equipment" class="form-select">
+                        <option value="">All Equipment</option>
+                        {% for equipment in equipment_list %}
+                        <option value="{{ equipment.id }}" {% if request.GET.equipment == equipment.id|stringformat:"i" %}selected{% endif %}>
+                            {{ equipment.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="status" class="form-label">Status</label>
+                    <select name="status" id="status" class="form-select">
+                        <option value="">All Status</option>
+                        <option value="pending" {% if request.GET.status == 'pending' %}selected{% endif %}>Pending</option>
+                        <option value="resolved" {% if request.GET.status == 'resolved' %}selected{% endif %}>Resolved</option>
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-filter me-1"></i> Filter
+                    </button>
+                    <a href="{% url 'maintenance_list' %}" class="btn btn-outline-secondary ms-2">
+                        <i class="fas fa-sync me-1"></i> Reset
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        {% for record in maintenance_records %}
+        <div class="col-md-6 col-lg-4">
+            <div class="maintenance-card p-3">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h5 class="mb-0">{{ record.equipment.name }}</h5>
+                    <div class="dropdown">
+                        <button class="btn btn-link text-dark p-0" type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item" href="{% url 'maintenance_detail' record.pk %}">
+                                    <i class="fas fa-eye me-2"></i> View Details
+                                </a>
+                            </li>
+                            {% if not record.resolved_date %}
+                            <li>
+                                <a class="dropdown-item" href="{% url 'maintenance_resolve' record.pk %}">
+                                    <i class="fas fa-check me-2"></i> Mark as Resolved
+                                </a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <span class="badge {% if record.resolved_date %}bg-success{% else %}bg-danger{% endif %}">
+                        {% if record.resolved_date %}Resolved{% else %}Pending{% endif %}
+                    </span>
+                </div>
+                <p class="small mb-2">{{ record.issue_description|truncatechars:150 }}</p>
+                <div class="small text-muted">
+                    <div><i class="fas fa-calendar-alt me-1"></i> Reported: {{ record.reported_date|date:"M d, Y" }}</div>
+                    <div><i class="fas fa-user me-1"></i> By: {{ record.reported_by.get_full_name|default:record.reported_by.username }}</div>
+                    {% if record.resolved_date %}
+                    <div class="text-success"><i class="fas fa-check-circle me-1"></i> Resolved: {{ record.resolved_date|date:"M d, Y" }}</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="text-center py-5">
+                <i class="fas fa-tools fa-3x mb-3 text-muted"></i>
+                <h5>No Maintenance Records Found</h5>
+                <p class="text-muted">No maintenance records match your search criteria.</p>
+                <a href="{% url 'maintenance_create' %}" class="btn btn-primary">
+                    <i class="fas fa-plus me-1"></i> Report Maintenance Issue
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if maintenance_records.has_other_pages %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if maintenance_records.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">First</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ maintenance_records.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">Previous</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <a class="page-link" href="#">First</a>
+            </li>
+            <li class="page-item disabled">
+                <a class="page-link" href="#">Previous</a>
+            </li>
+            {% endif %}
+
+            {% for num in maintenance_records.paginator.page_range %}
+                {% if maintenance_records.number == num %}
+                    <li class="page-item active"><a class="page-link" href="#">{{ num }}</a></li>
+                {% elif num > maintenance_records.number|add:'-3' and num < maintenance_records.number|add:'3' %}
+                    <li class="page-item"><a class="page-link" href="?page={{ num }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">{{ num }}</a></li>
+                {% endif %}
+            {% endfor %}
+
+            {% if maintenance_records.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ maintenance_records.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">Next</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ maintenance_records.paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">Last</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <a class="page-link" href="#">Next</a>
+            </li>
+            <li class="page-item disabled">
+                <a class="page-link" href="#">Last</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

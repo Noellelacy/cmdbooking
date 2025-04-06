@@ -68,12 +68,14 @@
                     <td>{{ reservation.expected_return_time|date:"Y-m-d H:i" }}</td>
                     <td>
                         <span class="badge {% if reservation.status == 'pending' %}bg-warning
-                                          {% elif reservation.status == 'approved' %}bg-success
-                                          {% elif reservation.status == 'rejected' %}bg-danger
-                                          {% elif reservation.status == 'checked_out' %}bg-info
-                                          {% elif reservation.status == 'returned' %}bg-secondary
-                                          {% elif reservation.status == 'overdue' %}bg-danger
-                                          {% endif %}">
+                                           {% elif reservation.status == 'approved' %}bg-success
+                                           {% elif reservation.status == 'pending_photo' %}bg-info
+                                           {% elif reservation.status == 'photo_submitted' %}bg-primary
+                                           {% elif reservation.status == 'rejected' %}bg-danger
+                                           {% elif reservation.status == 'checked_out' %}bg-info
+                                           {% elif reservation.status == 'returned' %}bg-secondary
+                                           {% elif reservation.status == 'overdue' %}bg-danger
+                                           {% endif %}">
                             {{ reservation.get_status_display }}
                         </span>
                     </td>
@@ -84,11 +86,15 @@
                         {% endif %}
                         
                         {% if reservation.status == 'approved' %}
-                        <button class="btn btn-sm btn-info" onclick="markCheckedOut({{ reservation.id }})">Mark Checked Out</button>
+                        <button class="btn btn-sm btn-info" onclick="markCheckedOut('{{ reservation.id }}')">Mark Checked Out</button>
+                        {% endif %}
+                        
+                        {% if reservation.status == 'photo_submitted' %}
+                        <a href="{% url 'review_equipment_photo' reservation.id %}" class="btn btn-sm btn-primary">Review Photo</a>
                         {% endif %}
                         
                         {% if reservation.status == 'checked_out' or reservation.status == 'overdue' %}
-                        <button class="btn btn-sm btn-secondary" onclick="markReturned({{ reservation.id }})">Mark Returned</button>
+                        <button class="btn btn-sm btn-secondary" onclick="markReturned('{{ reservation.id }}')">Mark Returned</button>
                         {% endif %}
                     </td>
                 </tr>

@@ -6,7 +6,22 @@
 
     <!-- Quick Stats Row -->
     <div class="row mt-4">
+        {% if pending_photos > 0 %}
         <div class="col-md-3 mb-4">
+            <div class="card bg-primary text-white h-100">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Photo Reviews</h5>
+                    <p class="display-4">{{ pending_photos }}</p>
+                    <a href="{% url 'manage_reservations' %}?status=photo_submitted" class="btn btn-light btn-sm">
+                        Review Photos
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4">
+        {% else %}
+        <div class="col-md-4 mb-4">
+        {% endif %}
             <div class="card bg-primary text-white h-100">
                 <div class="card-body text-center">
                     <h5 class="card-title">Total Equipment</h5>
@@ -15,7 +30,11 @@
                 </div>
             </div>
         </div>
+        {% if pending_photos > 0 %}
         <div class="col-md-3 mb-4">
+        {% else %}
+        <div class="col-md-4 mb-4">
+        {% endif %}
             <div class="card bg-success text-white h-100">
                 <div class="card-body text-center">
                     <h5 class="card-title">Active Reservations</h5>
@@ -24,14 +43,23 @@
                 </div>
             </div>
         </div>
+        {% if pending_photos > 0 %}
         <div class="col-md-3 mb-4">
+        {% else %}
+        <div class="col-md-4 mb-4">
+        {% endif %}
             <div class="card bg-warning text-white h-100">
                 <div class="card-body text-center">
                     <h5 class="card-title">Maintenance Needed</h5>
                     <p class="display-4">{{ maintenance_needed }}</p>
-                    <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#maintenanceModal">
-                        Report Issue
-                    </button>
+                    <div class="d-flex justify-content-center gap-2">
+                        <a href="{% url 'maintenance_list' %}" class="btn btn-light btn-sm">
+                            View Records
+                        </a>
+                        <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#maintenanceModal">
+                            Quick Report
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -48,6 +76,9 @@
                         </a>
                         <a href="{% url 'category_list' %}" class="list-group-item list-group-item-action">
                             <i class="fas fa-list"></i> Manage Categories
+                        </a>
+                        <a href="{% url 'maintenance_list' %}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-wrench"></i> Manage Maintenance
                         </a>
                     </div>
                 </div>
@@ -168,9 +199,10 @@
                 <h5 class="modal-title">Report Maintenance Issue</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="post" action="{% url 'report_maintenance' %}">
-                {% csrf_token %}
-                <div class="modal-body">
+            <div class="modal-body">
+                <p>You can quickly report a maintenance issue here, or use our full maintenance management system for more options.</p>
+                <form method="post" action="{% url 'report_maintenance' %}">
+                    {% csrf_token %}
                     <div class="mb-3">
                         <label for="equipment" class="form-label">Equipment</label>
                         <select name="equipment" id="equipment" class="form-select" required>
@@ -184,12 +216,15 @@
                         <label for="issue_description" class="form-label">Issue Description</label>
                         <textarea name="issue_description" id="issue_description" class="form-control" rows="3" required></textarea>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Submit Report</button>
-                </div>
-            </form>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Submit Quick Report</button>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <a href="{% url 'maintenance_list' %}" class="btn btn-secondary">View All Maintenance Records</a>
+                <a href="{% url 'maintenance_create' %}" class="btn btn-success">Advanced Reporting</a>
+            </div>
         </div>
     </div>
 </div>

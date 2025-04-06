@@ -2,12 +2,43 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from django.utils.html import format_html
-from django.urls import reverse
+from django.urls import reverse, path
 from django.utils import timezone
+from django.template.response import TemplateResponse
+from django.shortcuts import redirect
 from .models import (
     MultimediaEquipment, EquipmentUsage, UserProfile, 
-    EquipmentCategory, MaintenanceRecord
+    EquipmentCategory, MaintenanceRecord, BlacklistedStudent, CartItem
 )
+
+# Custom admin site to add student management link
+class CustomAdminSite(admin.AdminSite):
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('student-management/', self.admin_view(self.student_management_redirect), 
+                 name='student_management_redirect'),
+        ]
+        return custom_urls + urls
+    
+    def student_management_redirect(self, request):
+        """Redirect to the custom student management page"""
+        return redirect('admin_student_management')
+    
+    # Add the student management link to the admin index
+    def each_context(self, request):
+        context = super().each_context(request)
+        context['custom_links'] = [
+            {
+                'name': 'Student Management',
+                'url': reverse('admin_student_management'),
+                'description': 'Advanced student management with blacklisting features'
+            }
+        ]
+        return context
+
+# Replace the default admin site with our custom one
+admin_site = CustomAdminSite(name='admin')
 
 class UserProfileInline(admin.StackedInline):
     model = UserProfile
@@ -79,7 +110,6 @@ class MaintenanceRecordInline(admin.TabularInline):
     fields = ('issue_description', 'reported_date', 'resolved_date', 'resolution_notes')
     can_delete = True
 
-@admin.register(MultimediaEquipment)
 class MultimediaEquipmentAdmin(admin.ModelAdmin):
     list_display = ('name', 'equipment_type', 'get_status', 'location', 'get_current_user', 'get_maintenance_status')
     list_filter = ('equipment_type', 'is_available', 'condition', 'category', 'requires_training')
@@ -158,7 +188,6 @@ class MultimediaEquipmentAdmin(admin.ModelAdmin):
         obj.last_modified_by = request.user
         super().save_model(request, obj, form, change)
 
-@admin.register(EquipmentUsage)
 class EquipmentUsageAdmin(admin.ModelAdmin):
     list_display = ('equipment', 'user', 'get_user_type', 'checkout_time', 'actual_return_time', 'get_status', 'course_code')
     list_filter = ('status', 'user__userprofile__user_type', 'equipment__equipment_type', 'checkout_time', 'actual_return_time')
@@ -211,7 +240,6 @@ class EquipmentUsageAdmin(admin.ModelAdmin):
                          color, obj.get_status_display())
     get_status.short_description = 'Status'
 
-@admin.register(EquipmentCategory)
 class EquipmentCategoryAdmin(admin.ModelAdmin):
     list_display = ('name', 'get_equipment_count', 'created_at')
     search_fields = ('name', 'description')
@@ -222,7 +250,6 @@ class EquipmentCategoryAdmin(admin.ModelAdmin):
         return format_html('<a href="{}">{} items</a>', url, count)
     get_equipment_count.short_description = 'Equipment Count'
 
-@admin.register(MaintenanceRecord)
 class MaintenanceRecordAdmin(admin.ModelAdmin):
     list_display = ('equipment', 'issue_description', 'reported_date', 'get_status', 'get_duration')
     list_filter = ('resolved_date', 'reported_date')
@@ -243,6 +270,68 @@ class MaintenanceRecordAdmin(admin.ModelAdmin):
         return format_html('<span style="color: orange;">{} days (ongoing)</span>', duration.days)
     get_duration.short_description = 'Duration'
 
-# Unregister the default User admin and register our custom one
-admin.site.unregister(User)
-admin.site.register(User, CustomUserAdmin)
+class BlacklistedStudentAdmin(admin.ModelAdmin):
+    list_display = ('student', 'reason', 'blacklisted_date', 'blacklisted_by', 'is_active')
+    list_filter = ('is_active', 'blacklisted_date')
+    search_fields = ('student__username', 'student__email', 'reason')
+    raw_id_fields = ('student', 'blacklisted_by', 'removed_by')
+    readonly_fields = ('blacklisted_date', 'removed_date')
+    
+    fieldsets = (
+        ('Student Information', {
+            'fields': ('student', 'reason', 'is_active')
+        }),
+        ('Blacklist Details', {
+            'fields': ('blacklisted_by', 'blacklisted_date')
+        }),
+        ('Removal Information', {
+            'fields': ('removed_by', 'removed_date', 'removal_notes'),
+            'classes': ('collapse',)
+        })
+    )
+    
+    def has_delete_permission(self, request, obj=None):
+        # Instead of deleting, make the blacklist inactive
+        return False
+
+class CartItemAdmin(admin.ModelAdmin):
+    list_display = ('user', 'equipment', 'quantity', 'added_at', 'start_time', 'end_time', 'get_duration')
+    list_filter = ('added_at', 'start_time')
+    search_fields = ('user__username', 'equipment__name', 'purpose')
+    raw_id_fields = ('user', 'equipment')
+    
+    fieldsets = (
+        ('Cart Information', {
+            'fields': ('user', 'equipment', 'quantity')
+        }),
+        ('Reservation Details', {
+            'fields': ('start_time', 'end_time', 'purpose')
+        }),
+    )
+    
+    def get_duration(self, obj):
+        if obj.start_time and obj.end_time:
+            duration = obj.end_time - obj.start_time
+            hours = duration.total_seconds() / 3600
+            return f"{hours:.1f} hours"
+        return "Not scheduled"
+    get_duration.short_description = 'Duration'
+
+# First register User with the default UserAdmin
+admin_site.register(User, UserAdmin)
+# Then unregister it to add our custom one
+admin_site.unregister(User)
+# Finally register with our custom admin
+admin_site.register(User, CustomUserAdmin)
+
+# Register other models with our custom admin site
+admin_site.register(MultimediaEquipment, MultimediaEquipmentAdmin)
+admin_site.register(EquipmentUsage, EquipmentUsageAdmin)
+admin_site.register(EquipmentCategory, EquipmentCategoryAdmin)
+admin_site.register(MaintenanceRecord, MaintenanceRecordAdmin)
+admin_site.register(BlacklistedStudent, BlacklistedStudentAdmin)
+admin_site.register(CartItem, CartItemAdmin)
+
+# Replace the default admin site with our custom one
+# Import this in your project's urls.py instead of django.contrib.admin
+# from demoapp.admin import admin_site

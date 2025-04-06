@@ -1,0 +1,128 @@
+@startuml Equipment Reservation ER Diagram
+
+!define Table(name,desc) class name as "desc" << (E,#FF7700) >>
+!define primary_key(x) <u>x</u>
+!define foreign_key(x) <i>x</i>
+!define column(x) <b>x</b>
+!define not_null(x) <b>x</b>
+
+' Define entities with attributes
+Table(UserProfile, "UserProfile") {
+    primary_key(id)
+    foreign_key(user_id) : FK to User
+    column(user_type) : varchar
+    column(number) : varchar
+}
+
+Table(EquipmentCategory, "EquipmentCategory") {
+    primary_key(id)
+    column(name) : varchar
+    column(description) : text
+    foreign_key(created_by_id) : FK to User
+    column(created_at) : datetime
+}
+
+Table(MultimediaEquipment, "MultimediaEquipment") {
+    primary_key(id)
+    column(name) : varchar
+    column(equipment_type) : varchar
+    foreign_key(category_id) : FK to EquipmentCategory
+    column(serial_number) : varchar
+    column(condition) : varchar
+    column(inventory_number) : varchar
+    column(location) : varchar
+    column(description) : text
+    column(is_available) : boolean
+    column(max_reservation_hours) : integer
+    column(requires_training) : boolean
+    column(notes) : text
+    foreign_key(added_by_id) : FK to User
+    column(last_maintained) : datetime
+    column(created_at) : datetime
+    column(updated_at) : datetime
+    foreign_key(last_modified_by_id) : FK to User
+    column(total_quantity) : integer
+    column(available_quantity) : integer
+    column(min_alert_threshold) : integer
+    column(image) : image
+}
+
+Table(EquipmentUsage, "EquipmentUsage") {
+    primary_key(id)
+    foreign_key(equipment_id) : FK to MultimediaEquipment
+    foreign_key(user_id) : FK to User
+    column(checkout_time) : datetime
+    column(expected_return_time) : datetime
+    column(actual_return_time) : datetime
+    column(course_code) : varchar
+    column(purpose) : text
+    column(condition_notes) : text
+    column(status) : varchar
+    foreign_key(approved_by_id) : FK to User
+    column(approved_at) : datetime
+    column(approval_notes) : text
+    column(quantity) : integer
+    column(equipment_photo) : image
+    column(photo_uploaded_at) : datetime
+    column(photo_notes) : text
+}
+
+Table(MaintenanceRecord, "MaintenanceRecord") {
+    primary_key(id)
+    foreign_key(equipment_id) : FK to MultimediaEquipment
+    foreign_key(reported_by_id) : FK to User
+    column(issue_description) : text
+    column(reported_date) : datetime
+    column(resolved_date) : datetime
+    column(resolution_notes) : text
+}
+
+Table(CartItem, "CartItem") {
+    primary_key(id)
+    foreign_key(user_id) : FK to User
+    foreign_key(equipment_id) : FK to MultimediaEquipment
+    column(quantity) : integer
+    column(added_at) : datetime
+    column(start_time) : datetime
+    column(end_time) : datetime
+    column(purpose) : text
+}
+
+Table(BlacklistedStudent, "BlacklistedStudent") {
+    primary_key(id)
+    foreign_key(student_id) : FK to User
+    foreign_key(blacklisted_by_id) : FK to User
+    column(reason) : text
+    column(blacklisted_date) : datetime
+    column(is_active) : boolean
+    foreign_key(removed_by_id) : FK to User
+    column(removed_date) : datetime
+    column(removal_notes) : text
+}
+
+Table(User, "User (Django)") {
+    primary_key(id)
+    column(username) : varchar
+    column(password) : varchar
+    column(email) : varchar
+    column(first_name) : varchar
+    column(last_name) : varchar
+    column(is_staff) : boolean
+    column(is_active) : boolean
+    column(date_joined) : datetime
+}
+
+' Define relationships
+User "1" -- "1" UserProfile : has
+User "1" -- "*" MultimediaEquipment : adds
+User "1" -- "*" EquipmentUsage : reserves
+User "1" -- "*" MaintenanceRecord : reports
+User "1" -- "*" CartItem : has
+User "1" -- "*" BlacklistedStudent : is_blacklisted
+
+MultimediaEquipment "1" -- "*" EquipmentUsage : used_in
+MultimediaEquipment "1" -- "*" MaintenanceRecord : has
+MultimediaEquipment "1" -- "*" CartItem : contained_in
+EquipmentCategory "1" -- "*" MultimediaEquipment : categorizes
+
+@enduml

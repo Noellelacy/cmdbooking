@@ -90,7 +90,7 @@
 <div class="container-fluid py-4">
     <!-- Back to Analytics -->
     <div class="mb-4">
-        <a href="{% url 'demoapp:faculty_analytics' %}" class="btn btn-outline-primary">
+        <a href="{% url 'faculty_analytics' %}" class="btn btn-outline-primary">
             <i class="fas fa-arrow-left"></i> Back to Analytics Dashboard
         </a>
     </div>
@@ -238,13 +238,13 @@
         </div>
     </div>
 
-    <!-- User and Department Analysis -->
+    <!-- User and Usage Analysis -->
     <div class="row mb-4">
         <!-- Top Users -->
         <div class="col-md-6">
             <div class="card analytics-card">
                 <div class="card-header">
-                    <h5 class="mb-0">Top Users</h5>
+                    <h5 class="mb-0">User Usage</h5>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
@@ -252,7 +252,6 @@
                             <thead>
                                 <tr>
                                     <th>User</th>
-                                    <th>Department</th>
                                     <th>Total Uses</th>
                                     <th>Avg Duration</th>
                                     <th>Last Used</th>
@@ -262,7 +261,6 @@
                                 {% for stat in user_stats %}
                                 <tr>
                                     <td>{{ stat.user__username }}</td>
-                                    <td>{{ stat.user__userprofile__department }}</td>
                                     <td>{{ stat.total_reservations }}</td>
                                     <td>{{ stat.avg_duration|default:0|floatformat:1 }}h</td>
                                     <td>{{ stat.last_used|date:"M d, Y" }}</td>
@@ -274,15 +272,15 @@
                 </div>
             </div>
         </div>
-        <!-- Department Usage -->
+        <!-- User Usage Chart -->
         <div class="col-md-6">
             <div class="card analytics-card">
                 <div class="card-header">
-                    <h5 class="mb-0">Department Usage</h5>
+                    <h5 class="mb-0">User Usage Distribution</h5>
                 </div>
                 <div class="card-body">
                     <div class="chart-container">
-                        <canvas id="departmentUsageChart"></canvas>
+                        <canvas id="userUsageChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -315,7 +313,6 @@
 <script src="https://cdn.jsdelivr.net/npm/vis-timeline@7.7.0/dist/vis-timeline-graph2d.min.js"></script>
 
 <script>
-    /* eslint-disable */
     $(document).ready(function() {
         // Initialize daterangepicker
         $('input[name="daterange"]').daterangepicker({
@@ -326,9 +323,16 @@
             }
         });
 
+        // Parse JSON data safely
+        const timelineData = JSON.parse('{{ timeline_data|safe }}');
+        const dailyUsageData = JSON.parse('{{ daily_usage_data|safe }}');
+        const hourlyUsageData = JSON.parse('{{ hourly_usage_data|safe }}');
+        const userUsageData = JSON.parse('{{ user_usage_data|safe }}');
+        const rejectionData = JSON.parse('{{ rejection_data|safe }}');
+
         // Timeline setup
         const timelineContainer = document.getElementById('timeline');
-        const items = new vis.DataSet({{ timeline_data|safe }});
+        const items = new vis.DataSet(timelineData);
         const groups = new vis.DataSet([
             {id: 1, content: 'Reservations'},
             {id: 2, content: 'Maintenance'}
@@ -340,118 +344,94 @@
             max: moment('{{ end_date|date:"Y-m-d" }}').toDate(),
             stack: true,
             showMajorLabels: true,
-            showMinorLabels: true,
-            zoomMin: 1000 * 60 * 60 * 24,  // One day
-            zoomMax: 1000 * 60 * 60 * 24 * 31 * 3,  // Three months
-            template: function(item) {
-                return `
-                    <div class="timeline-item">
-                        <div class="item-title">${item.content}</div>
-                        ${item.description ? `<div class="item-description">${item.description}</div>` : ''}
-                    </div>
-                `;
-            }
+            showMinorLabels: true
         };
         
         const timeline = new vis.Timeline(timelineContainer, items, groups, options);
         
-        // Timeline controls
-        document.getElementById('zoomIn').addEventListener('click', function() {
+        // Zoom controls
+        $('#zoomIn').on('click', function() {
             timeline.zoomIn(0.5);
         });
         
-        document.getElementById('zoomOut').addEventListener('click', function() {
+        $('#zoomOut').on('click', function() {
             timeline.zoomOut(0.5);
         });
         
-        document.getElementById('moveLeft').addEventListener('click', function() {
-            const currentWindow = timeline.getWindow();
-            const interval = currentWindow.end - currentWindow.start;
-            timeline.setWindow(
-                currentWindow.start - interval * 0.3,
-                currentWindow.end - interval * 0.3
-            );
-        });
-        
-        document.getElementById('moveRight').addEventListener('click', function() {
-            const currentWindow = timeline.getWindow();
-            const interval = currentWindow.end - currentWindow.start;
-            timeline.setWindow(
-                currentWindow.start + interval * 0.3,
-                currentWindow.end + interval * 0.3
-            );
-        });
-        
-        document.getElementById('fitAll').addEventListener('click', function() {
+        $('#zoomFit').on('click', function() {
             timeline.fit();
         });
 
-        // Initialize charts
+        // Daily Usage Chart
         const dailyUsageCtx = document.getElementById('dailyUsageChart').getContext('2d');
         const dailyUsageChart = new Chart(dailyUsageCtx, {
             type: 'line',
-            data: {{ daily_usage_data|safe }},
+            data: dailyUsageData,
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        position: 'top'
+                        display: false
+                    },
+                    tooltip: {
+                        enabled: true
                     }
                 },
                 scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Number of Reservations'
-                        }
-                    },
                     x: {
                         title: {
                             display: true,
                             text: 'Date'
                         }
-                    }
-                }
-            }
-        });
-
-        const hourlyUsageCtx = document.getElementById('hourlyUsageChart').getContext('2d');
-        const hourlyUsageChart = new Chart(hourlyUsageCtx, {
-            type: 'bar',
-            data: {{ hourly_usage_data|safe }},
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top'
-                    }
-                },
-                scales: {
+                    },
                     y: {
                         beginAtZero: true,
                         title: {
                             display: true,
                             text: 'Number of Reservations'
                         }
-                    },
+                    }
+                }
+            }
+        });
+        
+        // Hourly Usage Chart
+        const hourlyUsageCtx = document.getElementById('hourlyUsageChart').getContext('2d');
+        const hourlyUsageChart = new Chart(hourlyUsageCtx, {
+            type: 'bar',
+            data: hourlyUsageData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
                     x: {
                         title: {
                             display: true,
                             text: 'Hour of Day'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Reservations'
                         }
                     }
                 }
             }
         });
 
-        // Department Usage Chart
-        const departmentUsageCtx = document.getElementById('departmentUsageChart').getContext('2d');
-        const departmentUsageChart = new Chart(departmentUsageCtx, {
+        // User Usage Chart
+        const userUsageCtx = document.getElementById('userUsageChart').getContext('2d');
+        const userUsageChart = new Chart(userUsageCtx, {
             type: 'pie',
-            data: {{ department_usage_data|safe }},
+            data: userUsageData,
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -473,38 +453,33 @@
                 }
             }
         });
-
-        // Rejection Chart
+        
+        // Rejection Reasons Chart
         const rejectionCtx = document.getElementById('rejectionChart').getContext('2d');
         const rejectionChart = new Chart(rejectionCtx, {
-            type: 'bar',
-            data: {{ rejection_data|safe }},
+            type: 'doughnut',
+            data: rejectionData,
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        position: 'top'
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Count'
-                        }
+                        position: 'right'
                     },
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Rejection Reason'
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw || 0;
+                                const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                const percentage = Math.round((value / total) * 100);
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
                         }
                     }
                 }
             }
         });
     });
-    /* eslint-enable */
 </script>
 {% endblock %}

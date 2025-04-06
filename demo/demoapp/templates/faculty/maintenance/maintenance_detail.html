@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Maintenance Record Details</h2>
+        <div>
+            <a href="{% url 'maintenance_list' %}" class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left me-1"></i> Back to Maintenance Records
+            </a>
+        </div>
+    </div>
+
+    {% if messages %}
+    <div class="mb-4">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card mb-4">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Maintenance Record #{{ maintenance.id }}</h5>
+            <span class="badge {% if maintenance.resolved_date %}bg-success{% else %}bg-danger{% endif %}">
+                {% if maintenance.resolved_date %}Resolved{% else %}Pending{% endif %}
+            </span>
+        </div>
+        <div class="card-body">
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <h6>Equipment Information</h6>
+                    <div class="mb-2">
+                        <strong>Name:</strong> {{ maintenance.equipment.name }}
+                    </div>
+                    <div class="mb-2">
+                        <strong>Type:</strong> {{ maintenance.equipment.get_equipment_type_display }}
+                    </div>
+                    <div class="mb-2">
+                        <strong>Serial Number:</strong> {{ maintenance.equipment.serial_number }}
+                    </div>
+                    <div class="mb-2">
+                        <strong>Inventory Number:</strong> {{ maintenance.equipment.inventory_number }}
+                    </div>
+                    <div class="mb-2">
+                        <strong>Current Condition:</strong> {{ maintenance.equipment.get_condition_display }}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6>Maintenance Details</h6>
+                    <div class="mb-2">
+                        <strong>Reported By:</strong> {{ maintenance.reported_by.get_full_name|default:maintenance.reported_by.username }}
+                    </div>
+                    <div class="mb-2">
+                        <strong>Reported Date:</strong> {{ maintenance.reported_date|date:"F d, Y H:i" }}
+                    </div>
+                    {% if maintenance.resolved_date %}
+                    <div class="mb-2">
+                        <strong>Resolved Date:</strong> {{ maintenance.resolved_date|date:"F d, Y H:i" }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <h6>Issue Description</h6>
+                <div class="p-3 bg-light rounded">
+                    <p>{{ maintenance.issue_description|linebreaks }}</p>
+                </div>
+            </div>
+
+            {% if maintenance.resolution_notes %}
+            <div class="mb-4">
+                <h6>Resolution Notes</h6>
+                <div class="p-3 bg-light rounded">
+                    <p>{{ maintenance.resolution_notes|linebreaks }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if not maintenance.resolved_date %}
+            <div class="d-flex justify-content-end">
+                <a href="{% url 'maintenance_resolve' maintenance.id %}" class="btn btn-success">
+                    <i class="fas fa-check me-1"></i> Mark as Resolved
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

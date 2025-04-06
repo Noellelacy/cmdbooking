@@ -151,6 +151,24 @@
               </ul>
             </li>
             {% endif %}
+            
+            {% if user.is_staff and user.is_superuser %}
+            {% if not user.userprofile.is_faculty and user.userprofile.user_type != 'student' %}
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Admin Menu
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="adminDropdown">
+                <li><a class="dropdown-item" href="{% url 'admin:index' %}"><i class="fas fa-cogs me-2"></i>Admin Dashboard</a></li>
+                <li><a class="dropdown-item" href="{% url 'admin_student_management' %}"><i class="fas fa-user-graduate me-2"></i>Student Management</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="{% url 'admin:auth_user_changelist' %}"><i class="fas fa-users me-2"></i>Manage Users</a></li>
+                <li><a class="dropdown-item" href="{% url 'admin:demoapp_multimediaequipment_changelist' %}"><i class="fas fa-laptop me-2"></i>Manage Equipment</a></li>
+              </ul>
+            </li>
+            {% endif %}
+            {% endif %}
+            
             <li class="nav-item">
               <span class="nav-link welcome-text">
                 <i class="fas fa-user me-1"></i>
@@ -185,27 +203,37 @@
     </div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     
+    <!-- CSRF Protection for AJAX requests -->
     <script>
-      // Function to refresh CSRF token
-      function refreshCSRFToken() {
-        $.get("{% url 'refresh_csrf' %}", function(token) {
-          $('input[name="csrfmiddlewaretoken"]').val(token);
-        });
-      }
-
       $(document).ready(function() {
-        // Refresh CSRF token when page loads
-        refreshCSRFToken();
-        
-        // Also refresh token when user interacts with any form
-        $('form').on('mouseenter', function() {
-          refreshCSRFToken();
+        // Get CSRF token from cookie
+        function getCookie(name) {
+          let cookieValue = null;
+          if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+              const cookie = cookies[i].trim();
+              if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+              }
+            }
+          }
+          return cookieValue;
+        }
+
+        // Set CSRF token for all AJAX requests
+        const csrftoken = getCookie('csrftoken');
+        $.ajaxSetup({
+          beforeSend: function(xhr, settings) {
+            if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+              xhr.setRequestHeader("X-CSRFToken", csrftoken);
+            }
+          }
         });
-        
-        // Refresh token periodically (every 10 minutes)
-        setInterval(refreshCSRFToken, 10 * 60 * 1000);
       });
     </script>
 

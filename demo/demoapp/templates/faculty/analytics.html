@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load custom_filters %}
+{% load static %}
 
 {% block css %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.css">
@@ -272,9 +273,9 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for item in popular_equipment %}
+                                {% for item in popular_equipment_display %}
                                 <tr>
-                                    <td>{{ item.equipment__name }}</td>
+                                    <td><a href="{% url 'equipment_detail_analytics' equipment_id=item.equipment__id %}">{{ item.equipment__name }}</a></td>
                                     <td>{{ item.equipment__equipment_type }}</td>
                                     <td><span class="badge bg-success">{{ item.usage_count }}</span></td>
                                 </tr>
@@ -306,9 +307,9 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for item in underutilized_equipment %}
+                                {% for item in underutilized_equipment_display %}
                                 <tr>
-                                    <td>{{ item.name }}</td>
+                                    <td><a href="{% url 'equipment_detail_analytics' equipment_id=item.id %}">{{ item.name }}</a></td>
                                     <td>{{ item.equipment_type }}</td>
                                     <td>
                                         {% if item.usage_count == 0 %}
@@ -340,8 +341,27 @@
                     <i class="fas fa-tags me-2"></i>Equipment Usage by Category
                 </div>
                 <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="categoryChart"></canvas>
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th>Usage Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in category_usage_display %}
+                                <tr>
+                                    <td>{{ item.equipment__category__name|default:"Uncategorized" }}</td>
+                                    <td><span class="badge bg-primary">{{ item.usage_count }}</span></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="2" class="text-center">No data available</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -362,9 +382,9 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for item in overbooked_equipment %}
+                                {% for item in overbooked_equipment_display %}
                                 <tr>
-                                    <td>{{ item.equipment__name }}</td>
+                                    <td><a href="{% url 'equipment_detail_analytics' equipment_id=item.equipment__id %}">{{ item.equipment__name }}</a></td>
                                     <td><span class="badge bg-danger">{{ item.reject_count }}</span></td>
                                 </tr>
                                 {% empty %}
@@ -386,6 +406,28 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/moment/moment.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+<script src="{% static 'js/faculty/analytics.js' %}"></script>
+
+<!-- Hidden data elements to pass data from Django to JS -->
+<script id="popular-equipment-data" type="application/json">
+    {{ popular_equipment|safe }}
+</script>
+
+<script id="underutilized-equipment-data" type="application/json">
+    {{ underutilized_equipment|safe }}
+</script>
+
+<script id="category-usage-data" type="application/json">
+    {{ category_usage|safe }}
+</script>
+
+<script id="duration-statistics-data" type="application/json">
+    {{ durations|safe }}
+</script>
+
+<script id="status-distribution-data" type="application/json">
+    {{ status_distribution|safe }}
+</script>
 
 <script>
 $(document).ready(function() {
@@ -397,110 +439,6 @@ $(document).ready(function() {
             format: 'MM/DD/YYYY'
         }
     });
-
-    // Initialize charts
-    const hoursCtx = document.getElementById('hoursChart').getContext('2d');
-    const daysCtx = document.getElementById('daysChart').getContext('2d');
-    
-    // Hours chart
-    new Chart(hoursCtx, {
-        type: 'line',
-        data: {
-            labels: Array.from({length: 24}, (_, i) => i),
-            datasets: [{
-                label: 'Hourly Usage',
-                data: {{ hours_data|safe }},
-                borderColor: 'rgb(75, 192, 192)',
-                tension: 0.1
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Equipment Usage by Hour'
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        stepSize: 1
-                    }
-                }
-            }
-        }
-    });
-
-    // Days chart
-    new Chart(daysCtx, {
-        type: 'bar',
-        data: {
-            labels: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-            datasets: [{
-                label: 'Daily Usage',
-                data: {{ days_data|safe }},
-                backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                borderColor: 'rgb(75, 192, 192)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Equipment Usage by Day'
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        stepSize: 1
-                    }
-                }
-            }
-        }
-    });
-
-    // Add trend sparklines for each equipment
-    {% for trend in quantity_trends %}
-    const trendCtx{{ forloop.counter }} = document.getElementById('trend-{{ forloop.counter }}').getContext('2d');
-    new Chart(trendCtx{{ forloop.counter }}, {
-        type: 'line',
-        data: {
-            labels: {{ trend.utilization_data|safe }}.map(d => d.date),
-            datasets: [{
-                data: {{ trend.utilization_data|safe }}.map(d => d.usage),
-                borderColor: 'rgb(75, 192, 192)',
-                borderWidth: 1,
-                pointRadius: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    enabled: false
-                }
-            },
-            scales: {
-                x: {
-                    display: false
-                },
-                y: {
-                    display: false
-                }
-            }
-        }
-    });
-    {% endfor %}
 });
 </script>
 {% endblock %}

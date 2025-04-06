@@ -1,0 +1,110 @@
+@startuml Equipment Reservation Use Case Diagram
+
+left to right direction
+skinparam actorStyle awesome
+
+' Define actors
+actor "Student" as student
+actor "Faculty" as faculty
+actor "Admin" as admin
+actor "System" as system
+
+' Define use case packages and use cases
+rectangle "Authentication" {
+  usecase "Login" as UC1
+  usecase "Logout" as UC2
+  usecase "Register" as UC3
+}
+
+rectangle "Equipment Management" {
+  usecase "Add Equipment" as UC4
+  usecase "Update Equipment" as UC5
+  usecase "Delete Equipment" as UC6
+  usecase "View Equipment" as UC7
+  usecase "Search Equipment" as UC8
+  usecase "Manage Categories" as UC9
+}
+
+rectangle "Reservation Process" {
+  usecase "Browse Equipment" as UC10
+  usecase "Add to Cart" as UC11
+  usecase "Submit Reservation" as UC12
+  usecase "Approve Reservation" as UC13
+  usecase "Reject Reservation" as UC14
+  usecase "Checkout Equipment" as UC15
+  usecase "Return Equipment" as UC16
+  usecase "Upload Equipment Photo" as UC17
+}
+
+rectangle "Maintenance" {
+  usecase "Report Equipment Issue" as UC18
+  usecase "Record Maintenance" as UC19
+  usecase "Resolve Maintenance Issue" as UC20
+}
+
+rectangle "Administration" {
+  usecase "View Analytics" as UC21
+  usecase "Blacklist Student" as UC22
+  usecase "Remove from Blacklist" as UC23
+  usecase "Manage Users" as UC24
+}
+
+rectangle "Notifications" {
+  usecase "Send Overdue Notifications" as UC25
+  usecase "Send Approval Notifications" as UC26
+}
+
+' Define relationships
+student --> UC1
+student --> UC2
+student --> UC3
+faculty --> UC1
+faculty --> UC2
+admin --> UC1
+admin --> UC2
+
+student --> UC7
+student --> UC8
+student --> UC10
+student --> UC11
+student --> UC12
+student --> UC16
+student --> UC17
+student --> UC18
+
+faculty --> UC4
+faculty --> UC5
+faculty --> UC7
+faculty --> UC8
+faculty --> UC9
+faculty --> UC13
+faculty --> UC14
+faculty --> UC15
+faculty --> UC16
+faculty --> UC18
+faculty --> UC19
+faculty --> UC21
+faculty --> UC22
+faculty --> UC23
+
+admin --> UC4
+admin --> UC5
+admin --> UC6
+admin --> UC7
+admin --> UC8
+admin --> UC9
+admin --> UC13
+admin --> UC14
+admin --> UC15
+admin --> UC16
+admin --> UC19
+admin --> UC20
+admin --> UC21
+admin --> UC22
+admin --> UC23
+admin --> UC24
+
+system --> UC25
+system --> UC26
+
+@enduml

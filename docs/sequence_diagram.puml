@@ -1,0 +1,120 @@
+@startuml Equipment Reservation Sequence Diagram
+
+actor Student
+actor Faculty
+boundary "Web Interface" as Web
+control "Django View" as View
+entity "Django Model" as Model
+database "Database" as DB
+
+' Equipment Reservation Process Sequence
+title Equipment Reservation Process
+
+' Browse and select equipment
+Student -> Web : Browse equipment
+Web -> View : List equipment request
+View -> Model : Get equipment list
+Model -> DB : Query available equipment
+DB --> Model : Return equipment data
+Model --> View : Return equipment list
+View --> Web : Display equipment list
+Web --> Student : Show available equipment
+
+' Add to cart
+Student -> Web : Add equipment to cart
+Web -> View : Add to cart request
+View -> Model : Create CartItem
+Model -> DB : Save CartItem
+DB --> Model : Confirm save
+Model --> View : Return success
+View --> Web : Update cart UI
+Web --> Student : Show updated cart
+
+' Submit reservation
+Student -> Web : Submit reservation
+Web -> View : Create reservation request
+View -> Model : Validate equipment availability
+Model -> DB : Check availability
+DB --> Model : Return availability status
+alt Equipment available
+    Model -> Model : Set status to "pending"
+    Model -> DB : Create EquipmentUsage
+    DB --> Model : Confirm save
+    Model --> View : Return success
+    View --> Web : Show success message
+    Web --> Student : Display reservation confirmation
+else Equipment unavailable
+    Model --> View : Return error
+    View --> Web : Show error message
+    Web --> Student : Display unavailability message
+end
+
+' Faculty approval process
+Faculty -> Web : View pending reservations
+Web -> View : List pending reservations
+View -> Model : Get pending reservations
+Model -> DB : Query pending status
+DB --> Model : Return pending reservations
+Model --> View : Return reservation list
+View --> Web : Display pending list
+Web --> Faculty : Show reservations to approve
+
+Faculty -> Web : Approve/Reject reservation
+Web -> View : Update reservation status
+View -> Model : Update EquipmentUsage status
+Model -> DB : Save updated status
+DB --> Model : Confirm update
+Model --> View : Return success
+View --> Web : Update reservation status
+Web --> Faculty : Show updated status
+
+' Notification
+View -> Student : Send email notification
+note right: Notification about approval/rejection
+
+' Equipment checkout
+Student -> Web : Visit to checkout equipment
+Web -> View : Checkout request
+View -> Model : Verify approval status
+Model -> DB : Query reservation status
+DB --> Model : Return reservation
+alt Status is approved
+    Faculty -> Web : Confirm checkout
+    Web -> View : Update to checked out
+    View -> Model : Update EquipmentUsage status
+    Model -> DB : Save checkout status
+    DB --> Model : Confirm update
+    Model --> View : Return success
+    View --> Web : Show checkout confirmation
+    Web --> Student : Display checkout success
+else Status not approved
+    View --> Web : Show error message
+    Web --> Student : Display not approved message
+end
+
+' Equipment return
+Student -> Web : Return equipment
+Web -> View : Return equipment request
+View -> Model : Update equipment status
+Model -> DB : Save return status
+DB --> Model : Confirm update
+alt Photo required
+    View --> Web : Request equipment photo
+    Web --> Student : Display photo upload form
+    Student -> Web : Upload equipment photo
+    Web -> View : Process photo
+    View -> Model : Save equipment photo
+    Model -> DB : Update with photo
+    DB --> Model : Confirm photo update
+end
+Faculty -> Web : Confirm equipment return
+Web -> View : Complete return process
+View -> Model : Update equipment availability
+Model -> DB : Update equipment status
+DB --> Model : Confirm update
+Model --> View : Return success
+View --> Web : Show return confirmation
+Web --> Faculty : Display return completion
+Web --> Student : Display return confirmation
+
+@enduml
